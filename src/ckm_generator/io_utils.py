@@ -26,6 +26,7 @@ TOPOLOGY_KEYS = (
 LOS_KEYS = ("los_mask", "LoS_mask", "los", "LoS")
 NLOS_KEYS = ("nlos_mask", "nLoS_mask", "NLoS_mask", "nlos", "NLoS")
 HEIGHT_KEYS = ("uav_height", "antenna_height", "antenna_height_m", "height", "height_m", "h_tx")
+PAD_BUILDING_HEIGHT_M = 1.0
 
 
 @dataclass
@@ -57,28 +58,44 @@ def load_single_input(
     nlos_mask_path: Optional[Path] = None,
     topology_max_m: float = 90.0,
     image_values_are_metres: bool = False,
+    meters_per_pixel: float = 1.0,
     image_size: int = 513,
 ) -> SampleInput:
     input_path = Path(input_path)
     suffix = input_path.suffix.lower()
     if suffix in HDF5_SUFFIXES:
-        samples = list(load_hdf5_samples(input_path, image_size=image_size))
+        samples = list(load_hdf5_samples(input_path, image_size=image_size, meters_per_pixel=meters_per_pixel))
         if not samples:
             raise ValueError(f"No topology sample found inside {input_path}")
         sample = samples[0]
         if height_m is not None:
             sample.height_m = float(height_m)
         return sample
+    if suffix == ".npz":
+        return _read_npz_sample(input_path, height_m=height_m, image_size=image_size, meters_per_pixel=meters_per_pixel)
 
     topology = load_2d_array(
         input_path,
         topology_max_m=topology_max_m,
         image_values_are_metres=image_values_are_metres,
     )
-    topology = resize_array(topology, image_size=image_size, is_mask=False)
+    topology = fit_array_to_model_grid(
+        topology,
+        image_size=image_size,
+        is_mask=False,
+        source=f"{input_path} topology",
+        meters_per_pixel=meters_per_pixel,
+    )
 
-    los = load_mask(los_mask_path, image_size=image_size) if los_mask_path else None
-    nlos = load_mask(nlos_mask_path, image_size=image_size) if nlos_mask_path else None
+    auto_los_mask_path = None
+    auto_nlos_mask_path = None
+    if los_mask_path is None and nlos_mask_path is None:
+        auto_los_mask_path, auto_nlos_mask_path = _find_sidecar_mask_paths(input_path)
+        los_mask_path = auto_los_mask_path
+        nlos_mask_path = auto_nlos_mask_path
+
+    los = load_mask(los_mask_path, image_size=image_size, meters_per_pixel=meters_per_pixel) if los_mask_path else None
+    nlos = load_mask(nlos_mask_path, image_size=image_size, meters_per_pixel=meters_per_pixel) if nlos_mask_path else None
     if los is None and nlos is not None:
         los = 1.0 - nlos
     if nlos is None and los is not None:
@@ -91,7 +108,11 @@ def load_single_input(
         reference_los_mask=los,
         reference_nlos_mask=nlos,
         source=str(input_path),
-        metadata={"input_type": suffix.lstrip(".") or "file"},
+        metadata={
+            "input_type": suffix.lstrip(".") or "file",
+            "auto_los_mask_path": str(auto_los_mask_path) if auto_los_mask_path else "",
+            "auto_nlos_mask_path": str(auto_nlos_mask_path) if auto_nlos_mask_path else "",
+        },
     )
 
 
@@ -131,10 +152,160 @@ def load_topology_image(path: Path, *, topology_max_m: float = 90.0, values_are_
     return (arr / max(max_value, 1.0) * float(topology_max_m)).astype(np.float32)
 
 
-def load_mask(path: Path, *, image_size: int = 513) -> np.ndarray:
+def load_mask(path: Path, *, image_size: int = 513, meters_per_pixel: float = 1.0) -> np.ndarray:
     arr = load_2d_array(Path(path), topology_max_m=1.0, image_values_are_metres=True)
-    arr = resize_array(arr, image_size=image_size, is_mask=True)
+    arr = fit_array_to_model_grid(
+        arr,
+        image_size=image_size,
+        is_mask=True,
+        source=f"{path} mask",
+        meters_per_pixel=meters_per_pixel,
+    )
     return normalize_mask(arr)
+
+
+def _read_npz_sample(input_path: Path, *, height_m: Optional[float], image_size: int, meters_per_pixel: float) -> SampleInput:
+    payload = np.load(input_path)
+    topology_key = _first_present(payload.files, TOPOLOGY_KEYS) or payload.files[0]
+    topology = fit_array_to_model_grid(
+        _as_2d(payload[topology_key]),
+        image_size=image_size,
+        is_mask=False,
+        source=f"{input_path}:{topology_key}",
+        meters_per_pixel=meters_per_pixel,
+    )
+
+    los_key = _first_present(payload.files, LOS_KEYS)
+    nlos_key = _first_present(payload.files, NLOS_KEYS)
+    los = (
+        normalize_mask(
+            fit_array_to_model_grid(
+                np.asarray(payload[los_key]),
+                image_size=image_size,
+                is_mask=True,
+                source=f"{input_path}:{los_key}",
+                meters_per_pixel=meters_per_pixel,
+            )
+        )
+        if los_key
+        else None
+    )
+    nlos = (
+        normalize_mask(
+            fit_array_to_model_grid(
+                np.asarray(payload[nlos_key]),
+                image_size=image_size,
+                is_mask=True,
+                source=f"{input_path}:{nlos_key}",
+                meters_per_pixel=meters_per_pixel,
+            )
+        )
+        if nlos_key
+        else None
+    )
+    if los is None and nlos is not None:
+        los = 1.0 - nlos
+    if nlos is None and los is not None:
+        nlos = 1.0 - los
+
+    height_key = _first_present(payload.files, HEIGHT_KEYS)
+    resolved_height = float(np.asarray(payload[height_key]).reshape(-1)[0]) if height_key else None
+    if height_m is not None:
+        resolved_height = float(height_m)
+
+    return SampleInput(
+        sample_id=slugify(input_path.stem),
+        topology=topology,
+        height_m=resolved_height,
+        reference_los_mask=los,
+        reference_nlos_mask=nlos,
+        source=str(input_path),
+        metadata={
+            "input_type": "npz",
+            "npz_keys": list(payload.files),
+            "topology_key": topology_key,
+            "height_key": height_key or "",
+            "los_key": los_key or "",
+            "nlos_key": nlos_key or "",
+            "meters_per_pixel": float(meters_per_pixel),
+        },
+    )
+
+
+def _find_sidecar_mask_paths(input_path: Path) -> tuple[Optional[Path], Optional[Path]]:
+    stem = input_path.stem
+    base = stem[: -len("_topology")] if stem.endswith("_topology") else stem
+    candidate_dirs = [input_path.parent, input_path.parent.parent / "masks_png"]
+    los_names = (f"{base}_los_mask.png", f"{base}_los.png", f"{base}_LoS_mask.png")
+    nlos_names = (f"{base}_nlos_mask.png", f"{base}_nlos.png", f"{base}_NLoS_mask.png")
+
+    los_path = _first_existing(candidate_dirs, los_names)
+    nlos_path = _first_existing(candidate_dirs, nlos_names)
+    return los_path, nlos_path
+
+
+def _first_existing(dirs: Sequence[Path], names: Sequence[str]) -> Optional[Path]:
+    for directory in dirs:
+        for name in names:
+            path = directory / name
+            if path.exists():
+                return path
+    return None
+
+
+def fit_array_to_model_grid(
+    arr: np.ndarray,
+    *,
+    image_size: int,
+    is_mask: bool,
+    source: str,
+    meters_per_pixel: float = 1.0,
+) -> np.ndarray:
+    arr = _as_2d(arr)
+    arr = _resample_to_one_meter_pixels(arr, meters_per_pixel=meters_per_pixel, is_mask=is_mask, source=source)
+    expected = (image_size, image_size)
+    if arr.shape == expected:
+        return arr.astype(np.float32, copy=False)
+    fill_value = 0.0 if is_mask else PAD_BUILDING_HEIGHT_M
+    out = np.full(expected, fill_value, dtype=np.float32)
+
+    h, w = arr.shape
+    crop_top = max((h - image_size) // 2, 0)
+    crop_left = max((w - image_size) // 2, 0)
+    crop = arr[crop_top : crop_top + min(h, image_size), crop_left : crop_left + min(w, image_size)]
+
+    out_top = max((image_size - crop.shape[0]) // 2, 0)
+    out_left = max((image_size - crop.shape[1]) // 2, 0)
+    out[out_top : out_top + crop.shape[0], out_left : out_left + crop.shape[1]] = crop.astype(np.float32, copy=False)
+    return out
+
+
+def _resample_to_one_meter_pixels(
+    arr: np.ndarray,
+    *,
+    meters_per_pixel: float,
+    is_mask: bool,
+    source: str,
+) -> np.ndarray:
+    mpp = float(meters_per_pixel)
+    if not np.isfinite(mpp) or mpp <= 0.0:
+        raise ValueError(f"{source} has invalid pixel spacing {meters_per_pixel!r}; it must be positive metres per pixel.")
+    if abs(mpp - 1.0) < 1.0e-6:
+        return arr.astype(np.float32, copy=False)
+
+    h, w = arr.shape
+    out_h = max(int(round(h * mpp)), 1)
+    out_w = max(int(round(w * mpp)), 1)
+    if (out_h, out_w) == arr.shape:
+        return arr.astype(np.float32, copy=False)
+
+    resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.BILINEAR
+    if is_mask:
+        img = Image.fromarray((normalize_mask(arr) * 255).astype(np.uint8), mode="L")
+        out = np.asarray(img.resize((out_w, out_h), resample), dtype=np.float32) / 255.0
+        return normalize_mask(out)
+    img = Image.fromarray(arr.astype(np.float32), mode="F")
+    return np.asarray(img.resize((out_w, out_h), resample), dtype=np.float32)
 
 
 def normalize_mask(arr: np.ndarray) -> np.ndarray:
@@ -162,13 +333,14 @@ def load_hdf5_samples(
     city: Optional[str] = None,
     sample: Optional[str] = None,
     image_size: int = 513,
+    meters_per_pixel: float = 1.0,
 ) -> Iterator[SampleInput]:
     hdf5_path = Path(hdf5_path)
     with h5py.File(str(hdf5_path), "r") as handle:
         if city and sample and city in handle and isinstance(handle[city], h5py.Group) and sample in handle[city]:
             grp = handle[city][sample]
             if isinstance(grp, h5py.Group) and _find_dataset(grp, TOPOLOGY_KEYS) is not None:
-                yield _read_hdf5_group(hdf5_path, f"{city}/{sample}", grp, image_size=image_size)
+                yield _read_hdf5_group(hdf5_path, f"{city}/{sample}", grp, image_size=image_size, meters_per_pixel=meters_per_pixel)
                 return
 
         if city and city in handle and isinstance(handle[city], h5py.Group):
@@ -178,7 +350,7 @@ def load_hdf5_samples(
                     continue
                 obj = city_grp[sample_name]
                 if isinstance(obj, h5py.Group) and _find_dataset(obj, TOPOLOGY_KEYS) is not None:
-                    yield _read_hdf5_group(hdf5_path, f"{city}/{sample_name}", obj, image_size=image_size)
+                    yield _read_hdf5_group(hdf5_path, f"{city}/{sample_name}", obj, image_size=image_size, meters_per_pixel=meters_per_pixel)
             return
 
         if sample and not city:
@@ -188,7 +360,7 @@ def load_hdf5_samples(
                     continue
                 obj = city_grp[sample]
                 if isinstance(obj, h5py.Group) and _find_dataset(obj, TOPOLOGY_KEYS) is not None:
-                    yield _read_hdf5_group(hdf5_path, f"{city_name}/{sample}", obj, image_size=image_size)
+                    yield _read_hdf5_group(hdf5_path, f"{city_name}/{sample}", obj, image_size=image_size, meters_per_pixel=meters_per_pixel)
             return
 
         if _looks_like_city_sample_hdf5(handle):
@@ -199,7 +371,7 @@ def load_hdf5_samples(
                 for sample_name in sorted(city_grp.keys()):
                     obj = city_grp[sample_name]
                     if isinstance(obj, h5py.Group) and _find_dataset(obj, TOPOLOGY_KEYS) is not None:
-                        yield _read_hdf5_group(hdf5_path, f"{city_name}/{sample_name}", obj, image_size=image_size)
+                        yield _read_hdf5_group(hdf5_path, f"{city_name}/{sample_name}", obj, image_size=image_size, meters_per_pixel=meters_per_pixel)
             return
 
         for group_name, grp in _iter_topology_groups(handle):
@@ -210,7 +382,7 @@ def load_hdf5_samples(
                 continue
             if sample and group_sample != sample:
                 continue
-            yield _read_hdf5_group(hdf5_path, group_name, grp, image_size=image_size)
+            yield _read_hdf5_group(hdf5_path, group_name, grp, image_size=image_size, meters_per_pixel=meters_per_pixel)
 
 
 def _iter_topology_groups(handle: h5py.File) -> Iterator[tuple[str, h5py.Group]]:
@@ -241,16 +413,46 @@ def _looks_like_city_sample_hdf5(handle: h5py.File) -> bool:
     return False
 
 
-def _read_hdf5_group(hdf5_path: Path, group_name: str, grp: h5py.Group, *, image_size: int) -> SampleInput:
+def _read_hdf5_group(hdf5_path: Path, group_name: str, grp: h5py.Group, *, image_size: int, meters_per_pixel: float) -> SampleInput:
     topo_ds = _find_dataset(grp, TOPOLOGY_KEYS)
     if topo_ds is None:
         raise ValueError(f"HDF5 group {group_name or '/'} has no topology dataset")
-    topology = resize_array(np.asarray(topo_ds[...], dtype=np.float32), image_size=image_size, is_mask=False)
+    topology = fit_array_to_model_grid(
+        np.asarray(topo_ds[...], dtype=np.float32),
+        image_size=image_size,
+        is_mask=False,
+        source=f"{hdf5_path}:{group_name or '/'} topology",
+        meters_per_pixel=meters_per_pixel,
+    )
 
     los_ds = _find_dataset(grp, LOS_KEYS)
     nlos_ds = _find_dataset(grp, NLOS_KEYS)
-    los = normalize_mask(resize_array(np.asarray(los_ds[...]), image_size=image_size, is_mask=True)) if los_ds is not None else None
-    nlos = normalize_mask(resize_array(np.asarray(nlos_ds[...]), image_size=image_size, is_mask=True)) if nlos_ds is not None else None
+    los = (
+        normalize_mask(
+            fit_array_to_model_grid(
+                np.asarray(los_ds[...]),
+                image_size=image_size,
+                is_mask=True,
+                source=f"{hdf5_path}:{group_name or '/'} los_mask",
+                meters_per_pixel=meters_per_pixel,
+            )
+        )
+        if los_ds is not None
+        else None
+    )
+    nlos = (
+        normalize_mask(
+            fit_array_to_model_grid(
+                np.asarray(nlos_ds[...]),
+                image_size=image_size,
+                is_mask=True,
+                source=f"{hdf5_path}:{group_name or '/'} nlos_mask",
+                meters_per_pixel=meters_per_pixel,
+            )
+        )
+        if nlos_ds is not None
+        else None
+    )
     if los is None and nlos is not None:
         los = 1.0 - nlos
     if nlos is None and los is not None:
@@ -268,7 +470,7 @@ def _read_hdf5_group(hdf5_path: Path, group_name: str, grp: h5py.Group, *, image
         reference_los_mask=los,
         reference_nlos_mask=nlos,
         source=f"{hdf5_path}:{group_name or '/'}",
-        metadata={"hdf5_group": group_name or "/"},
+        metadata={"hdf5_group": group_name or "/", "meters_per_pixel": float(meters_per_pixel)},
     )
 
 

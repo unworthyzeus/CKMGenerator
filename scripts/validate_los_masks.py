@@ -28,18 +28,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
         "--mode",
-        choices=("generator-auto", "generator-auto-no-input-mask", "exact-copy", "raycast"),
+        choices=("generator-auto", "generator-auto-no-input-mask", "provided-copy", "raycast"),
         default="generator-auto",
         help=(
-            "generator-auto validates the real default generator path. "
-            "generator-auto-no-input-mask removes HDF5 masks before generation, so the configured exact reference lookup is tested. "
-            "exact-copy is a trivial GT self-check. raycast checks the approximate geometry fallback."
+            "generator-auto validates the real default generator path: provided mask if present, otherwise generated. "
+            "generator-auto-no-input-mask removes HDF5 masks before generation, so the generated fallback is tested. "
+            "provided-copy is a trivial GT self-check. raycast checks the approximate geometry fallback directly."
         ),
     )
     parser.add_argument("--sample-step-px", type=float, default=0.25)
     parser.add_argument("--clearance-m", type=float, default=0.0)
     parser.add_argument("--building-dilation-px", type=int, default=0)
-    parser.add_argument("--keep-hdf5-group", action="store_true", help="With generator-auto-no-input-mask, keep the original group path instead of forcing fingerprint lookup.")
+    parser.add_argument("--keep-hdf5-group", action="store_true", help="With generator-auto-no-input-mask, keep the original group path in metadata.")
     parser.add_argument("--progress-every", type=int, default=100)
     parser.add_argument("--allow-mismatch", action="store_true", help="Exit 0 even when mismatches are found.")
     return parser.parse_args()
@@ -75,10 +75,10 @@ def main() -> None:
         if sample.height_m is None or sample.reference_los_mask is None:
             continue
 
-        if args.mode == "exact-copy":
+        if args.mode == "provided-copy":
             generated = np.asarray(sample.reference_los_mask, dtype=np.float32)
             cmp = compare_los_masks(generated, sample.reference_los_mask, sample.topology)
-            resolved_source = "exact-copy"
+            resolved_source = "provided-copy"
         elif args.mode == "raycast":
             generated = compute_los_mask(
                 sample.topology,

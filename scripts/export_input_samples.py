@@ -9,6 +9,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -33,7 +34,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nlos-mask", action=argparse.BooleanOptionalAction, default=True, help="Include/export derived NLoS mask.")
     parser.add_argument("--targets", action=argparse.BooleanOptionalAction, default=True, help="Include GT output datasets: path_loss, delay_spread, angular_spread.")
     parser.add_argument("--matrices", action=argparse.BooleanOptionalAction, default=True, help="Save exact numeric matrices as compressed .npz files.")
-    parser.add_argument("--png", action=argparse.BooleanOptionalAction, default=True, help="Save topology and mask PNG previews.")
+    parser.add_argument("--png", action=argparse.BooleanOptionalAction, default=True, help="Save raw topology PNG inputs and mask PNGs.")
+    parser.add_argument(
+        "--topology-max-m",
+        type=float,
+        default=None,
+        help="Metres encoded by white in raw topology PNG inputs. Defaults to each sample's own maximum, so PNG export does not clip.",
+    )
+    parser.add_argument("--preview-png", action=argparse.BooleanOptionalAction, default=True, help="Also save topology preview PNGs with title and colorbar.")
     parser.add_argument("--bundle-hdf5", action=argparse.BooleanOptionalAction, default=False, help="Also write a single HDF5 containing all exported samples.")
     return parser.parse_args()
 
@@ -48,6 +56,7 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     sample_dir = args.out / "samples"
     png_dir = args.out / "topology_png"
+    preview_png_dir = args.out / "topology_preview_png"
     mask_png_dir = args.out / "masks_png"
     matrix_dir = args.out / "matrices"
     sample_dir.mkdir(parents=True, exist_ok=True)
@@ -55,6 +64,8 @@ def main() -> None:
         png_dir.mkdir(parents=True, exist_ok=True)
         if args.los_mask or args.nlos_mask:
             mask_png_dir.mkdir(parents=True, exist_ok=True)
+    if args.preview_png:
+        preview_png_dir.mkdir(parents=True, exist_ok=True)
     if args.matrices:
         matrix_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,6 +84,7 @@ def main() -> None:
                     sample_name=sample_name,
                     sample_dir=sample_dir,
                     png_dir=png_dir,
+                    preview_png_dir=preview_png_dir,
                     mask_png_dir=mask_png_dir,
                     matrix_dir=matrix_dir,
                     include_los=args.los_mask,
@@ -80,6 +92,8 @@ def main() -> None:
                     include_targets=args.targets,
                     save_matrices=args.matrices,
                     save_png=args.png,
+                    save_preview_png=args.preview_png,
+                    topology_max_m=args.topology_max_m,
                 )
                 rows.append({"index": idx, **row})
                 print(f"{idx:03d}/{len(selected):03d} {row['sample_id']} h={float(row['antenna_height_m']):.2f}m")
@@ -135,6 +149,7 @@ def _export_one(
     sample_name: str,
     sample_dir: Path,
     png_dir: Path,
+    preview_png_dir: Path,
     mask_png_dir: Path,
     matrix_dir: Path,
     include_los: bool,
@@ -142,6 +157,8 @@ def _export_one(
     include_targets: bool,
     save_matrices: bool,
     save_png: bool,
+    save_preview_png: bool,
+    topology_max_m: float | None,
 ) -> dict[str, object]:
     grp = src[city][sample_name]
     sample_id = slugify(f"{city}_{sample_name}")
@@ -181,11 +198,13 @@ def _export_one(
         bundle_group = f"{city}/{sample_name}"
 
     topology_png = ""
+    topology_png_max_m = None
+    topology_preview_png = ""
     los_png = ""
     nlos_png = ""
     if save_png:
         topology_png_path = png_dir / f"{sample_id}_topology.png"
-        save_map_png(topology, topology_png_path, title=f"{sample_id} topology", unit="m", robust=True)
+        topology_png_max_m = _save_raw_topology_png(topology, topology_png_path, topology_max_m=topology_max_m)
         topology_png = str(topology_png_path)
         if include_los and los is not None:
             los_png_path = mask_png_dir / f"{sample_id}_los_mask.png"
@@ -195,6 +214,10 @@ def _export_one(
             nlos_png_path = mask_png_dir / f"{sample_id}_nlos_mask.png"
             save_mask_png(matrices["nlos_mask"], nlos_png_path)
             nlos_png = str(nlos_png_path)
+    if save_preview_png:
+        topology_preview_png_path = preview_png_dir / f"{sample_id}_topology_preview.png"
+        save_map_png(topology, topology_preview_png_path, title=f"{sample_id} topology", unit="m", robust=True)
+        topology_preview_png = str(topology_preview_png_path)
 
     matrix_npz = ""
     if save_matrices:
@@ -211,10 +234,25 @@ def _export_one(
         "bundle_group": bundle_group,
         "matrix_npz": matrix_npz,
         "topology_png": topology_png,
+        "topology_png_max_m": "" if topology_png_max_m is None else float(topology_png_max_m),
+        "topology_preview_png": topology_preview_png,
         "los_mask_png": los_png,
         "nlos_mask_png": nlos_png,
         "datasets": ",".join(matrices.keys()),
     }
+
+
+def _save_raw_topology_png(topology: np.ndarray, path: Path, *, topology_max_m: float | None) -> float:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    arr = np.nan_to_num(np.asarray(topology, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+    if topology_max_m is None:
+        max_m = float(np.max(arr, initial=0.0))
+    else:
+        max_m = float(topology_max_m)
+    max_m = max(max_m, 1.0e-6)
+    encoded = np.clip(arr / max_m, 0.0, 1.0)
+    Image.fromarray(np.rint(encoded * 65535.0).astype(np.uint16), mode="I;16").save(path)
+    return max_m
 
 
 def _write_dataset(group: h5py.Group | h5py.File, key: str, arr: np.ndarray) -> None:

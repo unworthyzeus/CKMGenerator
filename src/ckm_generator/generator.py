@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import json
-import hashlib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional, Sequence
 
 import numpy as np
 import yaml
@@ -99,10 +98,50 @@ class CKMGenerator:
         try:
             model.load_state_dict(state_dict, strict=False)
             model.to(self.device)
+            if report.selected_device == "cuda":
+                try:
+                    import torch
+
+                    torch.backends.cudnn.benchmark = True
+                    model.to(memory_format=torch.channels_last)
+                except Exception:
+                    pass
         except Exception as exc:
             raise RuntimeDependencyError(f"Could not move/load Try 80 model on {report.selected_device}: {type(exc).__name__}: {exc}") from exc
         model.eval()
         self.model = model
+
+    def predict_results(
+        self,
+        results: Sequence[PredictionResult],
+        *,
+        batch_size: int = 1,
+        mixed_precision: bool = False,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> None:
+        if not results:
+            return
+        if self.model is None:
+            self.load_model()
+        total = len(results)
+        batch_size = max(1, int(batch_size))
+        done = 0
+        while done < total:
+            current_batch_size = min(batch_size, total - done)
+            chunk = results[done : done + current_batch_size]
+            try:
+                predictions = self._predict_batch(chunk, mixed_precision=mixed_precision)
+            except RuntimeDependencyError as exc:
+                if current_batch_size <= 1 or "out of memory" not in str(exc).lower():
+                    raise
+                self._empty_cuda_cache()
+                batch_size = max(1, current_batch_size // 2)
+                continue
+            for result, prediction in zip(chunk, predictions):
+                result.predictions = prediction
+            done += current_batch_size
+            if progress_callback is not None:
+                progress_callback(done, total)
 
     def generate(
         self,
@@ -122,8 +161,6 @@ class CKMGenerator:
 
         los_cfg = self.config.get("los", {})
         reference_los = self._prepare_mask(sample.reference_los_mask) if sample.reference_los_mask is not None else None
-        if reference_los is None and mask_source in {"auto", "exact", "provided"}:
-            reference_los = self._lookup_reference_los(sample, topology, h_m)
 
         raycast_los: Optional[np.ndarray] = None
 
@@ -146,32 +183,23 @@ class CKMGenerator:
             if reference_los is not None:
                 los = reference_los * ground
                 generated_los = los.copy()
-                resolved_mask_source = "exact"
+                resolved_mask_source = "provided"
             else:
                 los = get_raycast_los()
                 generated_los = los
                 resolved_mask_source = "generated"
-        elif mask_source == "exact":
-            if reference_los is None:
-                los = get_raycast_los()
-                generated_los = los
-                resolved_mask_source = "generated"
-            else:
-                los = reference_los * ground
-                generated_los = los.copy()
-                resolved_mask_source = "exact"
         elif mask_source == "provided":
             if reference_los is None:
                 raise ValueError("mask_source='provided' was requested, but no LoS/NLoS mask was provided")
             los = reference_los * ground
-            generated_los = get_raycast_los()
+            generated_los = los.copy()
             resolved_mask_source = "provided"
         elif mask_source == "generated":
             los = get_raycast_los()
             generated_los = los
             resolved_mask_source = "generated"
         else:
-            raise ValueError("mask_source must be 'auto', 'exact', 'generated', or 'provided'")
+            raise ValueError("mask_source must be 'auto', 'generated', or 'provided'")
         nlos = compute_nlos_mask(topology, los)
         generated_nlos = compute_nlos_mask(topology, generated_los)
 
@@ -194,9 +222,9 @@ class CKMGenerator:
         raycast_comparison = None
         if reference_los is not None and raycast_los is not None:
             raycast_comparison = compare_los_masks(raycast_los, reference_los, topology)
-        if comparison is not None and mask_source in {"auto", "exact", "provided"} and comparison.mismatches != 0:
+        if comparison is not None and mask_source in {"auto", "provided"} and comparison.mismatches != 0:
             raise RuntimeError(
-                f"Exact LoS mismatch detected for {sample.sample_id}: "
+                f"Provided LoS mismatch detected for {sample.sample_id}: "
                 f"{comparison.mismatches} pixels ({comparison.mismatch_fraction:.8%})."
             )
         return PredictionResult(
@@ -229,6 +257,7 @@ class CKMGenerator:
         *,
         save_arrays: bool = True,
         save_masks: bool = True,
+        save_visual_maps: bool = True,
     ) -> Dict[str, str]:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -252,28 +281,29 @@ class CKMGenerator:
                 save_mask_png(getattr(result, key), path)
                 written[key] = str(path)
 
-        for key, arr in result.priors.items():
-            title = f"{result.sample_id} | h={result.antenna_height_m:.2f} m | prior {key}"
-            unit = "dB" if "path_loss" in key else ("ns" if "delay" in key else "deg")
-            path = prior_dir / f"{prefix}_prior_{key}.png"
-            save_map_png(arr, path, mask=result.ground_mask, title=title, unit=unit)
-            written[f"prior_{key}"] = str(path)
+        if save_visual_maps:
+            for key, arr in result.priors.items():
+                title = f"{result.sample_id} | h={result.antenna_height_m:.2f} m | prior {key}"
+                unit = "dB" if "path_loss" in key else ("ns" if "delay" in key else "deg")
+                path = prior_dir / f"{prefix}_prior_{key}.png"
+                save_map_png(arr, path, mask=result.ground_mask, title=title, unit=unit)
+                written[f"prior_{key}"] = str(path)
 
-        for task, arr in result.predictions.items():
-            label, unit, cmap = TASK_LABELS[task]
-            path = pred_dir / f"{prefix}_pred_{task}.png"
-            save_map_png(arr, path, mask=result.ground_mask, title=f"{result.sample_id} | h={result.antenna_height_m:.2f} m | {label}", cmap=cmap, unit=unit)
-            written[f"pred_{task}"] = str(path)
+            for task, arr in result.predictions.items():
+                label, unit, cmap = TASK_LABELS[task]
+                path = pred_dir / f"{prefix}_pred_{task}.png"
+                save_map_png(arr, path, mask=result.ground_mask, title=f"{result.sample_id} | h={result.antenna_height_m:.2f} m | {label}", cmap=cmap, unit=unit)
+                written[f"pred_{task}"] = str(path)
 
-        if result.predictions:
-            joint_path = pred_dir / f"{prefix}_pred_joint.png"
-            save_joint_prediction_png(
-                result.predictions,
-                joint_path,
-                ground_mask=result.ground_mask,
-                title=f"{result.sample_id} | antenna height {result.antenna_height_m:.2f} m",
-            )
-            written["pred_joint"] = str(joint_path)
+            if result.predictions:
+                joint_path = pred_dir / f"{prefix}_pred_joint.png"
+                save_joint_prediction_png(
+                    result.predictions,
+                    joint_path,
+                    ground_mask=result.ground_mask,
+                    title=f"{result.sample_id} | antenna height {result.antenna_height_m:.2f} m",
+                )
+                written["pred_joint"] = str(joint_path)
 
         if save_arrays:
             array_dir.mkdir(parents=True, exist_ok=True)
@@ -315,14 +345,18 @@ class CKMGenerator:
         device = self.device
         channels = self._build_channels(topology, ground, los, nlos, priors)
         inputs = torch.from_numpy(channels).unsqueeze(0).to(device)
+        if self._uses_cuda():
+            inputs = inputs.contiguous(memory_format=torch.channels_last)
         height = torch.tensor([height_m], dtype=torch.float32, device=device)
         priors_native = {
             "path_loss": torch.from_numpy(priors["path_loss"]).unsqueeze(0).unsqueeze(0).to(device),
             "delay_spread": torch.from_numpy(priors["delay_spread"]).unsqueeze(0).unsqueeze(0).to(device),
             "angular_spread": torch.from_numpy(priors["angular_spread"]).unsqueeze(0).unsqueeze(0).to(device),
         }
+        if self._uses_cuda():
+            priors_native = {key: value.contiguous(memory_format=torch.channels_last) for key, value in priors_native.items()}
         priors_trans = {task: transform_target(task, value) for task, value in priors_native.items()}
-        with torch.no_grad():
+        with torch.inference_mode():
             try:
                 outputs = self.model(inputs, self.height_embed(height), priors_trans)
                 preds_native = {task: inverse_transform(task, outputs[task]["pred_trans"]) for task in TASKS}
@@ -338,6 +372,59 @@ class CKMGenerator:
                     ) from exc
                 raise RuntimeDependencyError(f"Model inference failed on {self.device}: {type(exc).__name__}: {exc}") from exc
         return {task: preds_native[task][0, 0].detach().cpu().numpy().astype(np.float32) for task in TASKS}
+
+    def _predict_batch(self, results: Sequence[PredictionResult], *, mixed_precision: bool = False) -> list[Dict[str, np.ndarray]]:
+        import torch
+
+        assert self.model is not None
+        device = self.device
+        channels = np.stack(
+            [
+                self._build_channels(result.topology, result.ground_mask, result.los_mask, result.nlos_mask, result.priors)
+                for result in results
+            ],
+            axis=0,
+        )
+        inputs = torch.from_numpy(channels).to(device)
+        if self._uses_cuda():
+            inputs = inputs.contiguous(memory_format=torch.channels_last)
+        height = torch.tensor([result.antenna_height_m for result in results], dtype=torch.float32, device=device)
+        priors_native = {
+            task: torch.from_numpy(np.stack([result.priors[task] for result in results], axis=0)[:, None].astype(np.float32)).to(device)
+            for task in TASKS
+        }
+        if self._uses_cuda():
+            priors_native = {key: value.contiguous(memory_format=torch.channels_last) for key, value in priors_native.items()}
+        priors_trans = {task: transform_target(task, value) for task, value in priors_native.items()}
+
+        try:
+            with torch.inference_mode():
+                if mixed_precision and self._uses_cuda():
+                    with torch.autocast(device_type="cuda", dtype=torch.float16):
+                        outputs = self.model(inputs, self.height_embed(height), priors_trans)
+                else:
+                    outputs = self.model(inputs, self.height_embed(height), priors_trans)
+                preds_native = {task: inverse_transform(task, outputs[task]["pred_trans"]) for task in TASKS}
+        except RuntimeError as exc:
+            msg = str(exc)
+            low = msg.lower()
+            if "out of memory" in low or "e_outofmemory" in low or "memory" in low:
+                self._empty_cuda_cache()
+                raise RuntimeDependencyError(
+                    f"Model inference ran out of memory on {self.device} with batch size {len(results)}. "
+                    "Lower the model batch size, close GPU-heavy apps, or use --device cpu if needed. "
+                    f"Original error: {type(exc).__name__}: {exc}"
+                ) from exc
+            raise RuntimeDependencyError(f"Model inference failed on {self.device}: {type(exc).__name__}: {exc}") from exc
+
+        batch_arrays = {
+            task: preds_native[task][:, 0].detach().cpu().numpy().astype(np.float32)
+            for task in TASKS
+        }
+        return [
+            {task: batch_arrays[task][idx] for task in TASKS}
+            for idx in range(len(results))
+        ]
 
     def _build_channels(
         self,
@@ -365,107 +452,34 @@ class CKMGenerator:
         )
         return np.nan_to_num(channels.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
 
+    def _uses_cuda(self) -> bool:
+        return str(getattr(self.runtime_report, "selected_device", "")).lower() == "cuda"
+
+    def _empty_cuda_cache(self) -> None:
+        if not self._uses_cuda():
+            return
+        try:
+            import torch
+
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+
     def _prepare_topology(self, topology: np.ndarray) -> np.ndarray:
         arr = np.nan_to_num(np.asarray(topology, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         if arr.shape != (513, 513):
-            from .io_utils import resize_array
+            from .io_utils import fit_array_to_model_grid
 
-            arr = resize_array(arr, image_size=513, is_mask=False)
+            arr = fit_array_to_model_grid(arr, image_size=513, is_mask=False, source="sample topology")
         return np.clip(arr, 0.0, None).astype(np.float32)
 
     def _prepare_mask(self, mask: Optional[np.ndarray]) -> Optional[np.ndarray]:
         if mask is None:
             return None
-        from .io_utils import normalize_mask, resize_array
+        from .io_utils import fit_array_to_model_grid, normalize_mask
 
-        arr = resize_array(mask, image_size=513, is_mask=True)
+        arr = fit_array_to_model_grid(mask, image_size=513, is_mask=True, source="sample mask")
         return normalize_mask(arr)
-
-    def _lookup_reference_los(self, sample: SampleInput, topology: np.ndarray, height_m: float) -> Optional[np.ndarray]:
-        los_cfg = self.config.get("los", {})
-        ref_value = los_cfg.get("exact_reference_hdf5")
-        if not ref_value:
-            return None
-        ref_path = self._resolve(ref_value)
-        if not ref_path.exists():
-            raise ValueError(f"Configured exact reference HDF5 does not exist: {ref_path}")
-
-        group_name = str(sample.metadata.get("hdf5_group", "")).strip("/")
-        if not group_name or group_name == ".":
-            return self._lookup_reference_los_by_fingerprint(ref_path, topology, height_m)
-
-        import h5py
-
-        with h5py.File(str(ref_path), "r") as handle:
-            if group_name not in handle:
-                return self._lookup_reference_los_by_fingerprint(ref_path, topology, height_m)
-            grp = handle[group_name]
-            if "los_mask" not in grp:
-                return self._lookup_reference_los_by_fingerprint(ref_path, topology, height_m)
-            ref_topology = np.asarray(grp["topology_map"][...], dtype=np.float32) if "topology_map" in grp else None
-            if ref_topology is not None and ref_topology.shape == topology.shape and not np.array_equal(ref_topology, topology):
-                raise ValueError(
-                    f"Reference HDF5 group {group_name} exists, but topology_map is not byte-identical to the input. "
-                    "Refusing exact LoS lookup to avoid using the wrong GT mask."
-                )
-            if "uav_height" in grp:
-                ref_height = float(np.asarray(grp["uav_height"][...]).reshape(-1)[0])
-                if abs(ref_height - float(height_m)) > 1.0e-3:
-                    raise ValueError(
-                        f"Reference HDF5 group {group_name} height mismatch: input={height_m:.6f}, reference={ref_height:.6f}."
-                    )
-            return self._prepare_mask(np.asarray(grp["los_mask"][...], dtype=np.float32))
-
-    def _lookup_reference_los_by_fingerprint(self, ref_path: Path, topology: np.ndarray, height_m: float) -> Optional[np.ndarray]:
-        index = self._load_or_build_reference_index(ref_path)
-        candidates = index.get(_topology_height_key(topology, height_m), [])
-        if not candidates:
-            return None
-
-        import h5py
-
-        with h5py.File(str(ref_path), "r") as handle:
-            for group_name in candidates:
-                if group_name not in handle:
-                    continue
-                grp = handle[group_name]
-                if "topology_map" not in grp or "los_mask" not in grp:
-                    continue
-                ref_topology = np.asarray(grp["topology_map"][...], dtype=np.float32)
-                if not np.array_equal(ref_topology, topology):
-                    continue
-                if "uav_height" in grp:
-                    ref_height = float(np.asarray(grp["uav_height"][...]).reshape(-1)[0])
-                    if abs(ref_height - float(height_m)) > 1.0e-3:
-                        continue
-                return self._prepare_mask(np.asarray(grp["los_mask"][...], dtype=np.float32))
-        return None
-
-    def _load_or_build_reference_index(self, ref_path: Path) -> Dict[str, list[str]]:
-        cache_dir = self.project_root / "cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        index_path = cache_dir / f"{ref_path.stem}_exact_los_index.json"
-        if index_path.exists():
-            return json.loads(index_path.read_text(encoding="utf-8"))
-
-        import h5py
-
-        index: Dict[str, list[str]] = {}
-        with h5py.File(str(ref_path), "r") as handle:
-            for city in sorted(handle.keys()):
-                city_grp = handle[city]
-                if not hasattr(city_grp, "keys"):
-                    continue
-                for sample in sorted(city_grp.keys()):
-                    grp = city_grp[sample]
-                    if "topology_map" not in grp or "uav_height" not in grp or "los_mask" not in grp:
-                        continue
-                    topology = np.asarray(grp["topology_map"][...], dtype=np.float32)
-                    height_m = float(np.asarray(grp["uav_height"][...]).reshape(-1)[0])
-                    key = _topology_height_key(topology, height_m)
-                    index.setdefault(key, []).append(f"{city}/{sample}")
-        index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
-        return index
 
     def _metadata(self, result: PredictionResult, written: Dict[str, str]) -> Dict[str, object]:
         return {
@@ -498,8 +512,3 @@ class CKMGenerator:
         report = ensure_torch_runtime(name)
         return build_torch_device(report.selected_device or "cpu")
 
-
-def _topology_height_key(topology: np.ndarray, height_m: float) -> str:
-    topo = np.ascontiguousarray(np.asarray(topology, dtype=np.float32))
-    digest = hashlib.md5(topo.tobytes()).hexdigest()
-    return f"{digest}|{float(height_m):.3f}"

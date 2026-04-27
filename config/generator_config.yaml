@@ -30,7 +30,6 @@ io:
   height_max_m: 478.0
 
 los:
-  exact_reference_hdf5: C:/TFG/TFGpractice/Datasets/CKM_Dataset_270326.h5
   rx_height_m: 1.5
   sample_step_px: 0.25
   clearance_m: 0.0

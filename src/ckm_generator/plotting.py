@@ -54,8 +54,8 @@ def save_map_png(
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
     if unit:
         cbar.set_label(unit, fontsize=8)
-    fig.tight_layout(pad=0.1)
-    fig.savefig(path, bbox_inches="tight", pad_inches=0.03)
+    fig.tight_layout(pad=0.3)
+    fig.savefig(path)
     plt.close(fig)
 
 
@@ -81,5 +81,5 @@ def save_joint_prediction_png(predictions: Dict[str, np.ndarray], path: Path, *,
         cbar.set_label(unit, fontsize=8)
     fig.suptitle(title, fontsize=13)
     fig.tight_layout()
-    fig.savefig(path, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(path)
     plt.close(fig)
