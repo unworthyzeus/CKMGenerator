@@ -1,0 +1,8 @@
+numpy
+h5py
+pillow
+matplotlib
+pyyaml
+scipy
+torch
+streamlit

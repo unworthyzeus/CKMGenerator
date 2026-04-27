@@ -1,0 +1,236 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{rappaport}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Purpose of this note}{3}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}High-level architecture}{3}{section.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overall Try 80 pipeline. The frozen priors from Try 78 and Try 79 are injected as input channels; the deep model predicts bounded residuals on top of them.}}{3}{figure.caption.2}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:pipeline}{{1}{3}{Overall Try 80 pipeline. The frozen priors from Try 78 and Try 79 are injected as input channels; the deep model predicts bounded residuals on top of them}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}What was reused from the literature, what was changed, and what is new}{3}{section.3}\protected@file@percent }
+\citation{rappaport}
+\citation{wocc2021}
+\citation{khawaja_survey}
+\citation{tr38901}
+\citation{khawaja_survey}
+\citation{rappaport}
+\citation{wocc2021}
+\citation{tr38901}
+\citation{khawaja_survey}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Try 78: path loss}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.1}What the literature provides}{4}{subsubsection.3.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Free-space path loss (FSPL).}{4}{section*.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Two-ray / ground-reflection model.}{4}{section*.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{COST-231 / Hata urban path loss.}{4}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{LoS/NLoS regime separation.}{4}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.2}What we took exactly from the literature}{4}{subsubsection.3.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.3}What we changed or did not take}{4}{subsubsection.3.1.3}\protected@file@percent }
+\citation{tr38901}
+\citation{winner2}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.4}What is genuinely new in Try 78}{5}{subsubsection.3.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Try 79: delay spread and angular spread}{5}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}What the literature provides}{5}{subsubsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Log-normal / log-domain treatment of spreads.}{5}{section*.7}\protected@file@percent }
+\citation{cai2019}
+\citation{izydorczyk2019}
+\citation{cai2019}
+\citation{izydorczyk2019}
+\@writefile{toc}{\contentsline {paragraph}{LoS/NLoS and scenario-class conditioning.}{6}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Distance and elevation-angle dependence.}{6}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Positive support and right-skewed distributions.}{6}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}What we took exactly from the literature}{6}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}What we changed or did not take}{6}{subsubsection.3.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4}What is genuinely new in Try 79}{7}{subsubsection.3.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Try 78: Path Loss Prior}{7}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}LoS branch: coherent two-ray model}{7}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.1}Geometry and distances}{7}{subsubsection.4.1.1}\protected@file@percent }
+\newlabel{eq:d_los}{{1}{7}{Geometry and distances}{equation.4.1}{}}
+\newlabel{eq:d_ref}{{2}{7}{Geometry and distances}{equation.4.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Two-ray geometry. Direct path (blue) has length $d_{\mathrm  {LoS}}$; reflected path (green) has the same total length as the image-source path (gray dashed), which is $d_{\mathrm  {ref}}$.}}{8}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:tworay}{{2}{8}{Two-ray geometry. Direct path (blue) has length $d_{\mathrm {LoS}}$; reflected path (green) has the same total length as the image-source path (gray dashed), which is $d_{\mathrm {ref}}$}{figure.caption.11}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.2}Free-space path loss}{8}{subsubsection.4.1.2}\protected@file@percent }
+\newlabel{eq:fspl}{{3}{8}{Free-space path loss}{equation.4.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Derivation.}{8}{section*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Physical meaning.}{8}{section*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.3}Coherent two-ray correction}{8}{subsubsection.4.1.3}\protected@file@percent }
+\newlabel{eq:field_sum}{{5}{9}{Coherent two-ray correction}{equation.4.5}{}}
+\newlabel{eq:c2ray}{{7}{9}{Coherent two-ray correction}{equation.4.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Term-by-term interpretation.}{9}{section*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.4}Calibrated LoS prior}{9}{subsubsection.4.1.4}\protected@file@percent }
+\newlabel{eq:pl_los}{{8}{9}{Calibrated LoS prior}{equation.4.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Calibration of the LoS two-ray model}{10}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:los_calibration}{{4.2}{10}{Calibration of the LoS two-ray model}{subsection.4.2}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Data preparation}{10}{subsubsection.4.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.2}Grid search for $(\rho , \phi )$}{10}{subsubsection.4.2.2}\protected@file@percent }
+\newlabel{eq:phi_grid}{{10}{10}{Grid search for $(\rho , \phi )$}{equation.4.10}{}}
+\newlabel{eq:rho_grid}{{11}{10}{Grid search for $(\rho , \phi )$}{equation.4.11}{}}
+\newlabel{eq:rmse_grid}{{14}{11}{Grid search for $(\rho , \phi )$}{equation.4.14}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.3}Post-fit Gaussian smoothing across height bins}{11}{subsubsection.4.2.3}\protected@file@percent }
+\newlabel{eq:gauss_smooth}{{16}{11}{Post-fit Gaussian smoothing across height bins}{equation.4.16}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.4}Radial residual correction}{11}{subsubsection.4.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.5}Fitted parameter values}{11}{subsubsection.4.2.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Representative fitted LoS two-ray parameters by height bin.}}{11}{table.caption.15}\protected@file@percent }
+\newlabel{tab:los_params}{{1}{11}{Representative fitted LoS two-ray parameters by height bin}{table.caption.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Effective ground-reflection amplitude $\rho ^*$ as a function of UAV height, fitted independently per 5 m height bin. Values are stable in the range $0.47$--$0.56$ for 10--130 m, then rise slightly at higher altitudes where training data is sparser.}}{12}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:rho_vs_h}{{3}{12}{Effective ground-reflection amplitude $\rho ^*$ as a function of UAV height, fitted independently per 5 m height bin. Values are stable in the range $0.47$--$0.56$ for 10--130 m, then rise slightly at higher altitudes where training data is sparser}{figure.caption.16}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Schematic comparison of FSPL and the coherent two-ray model for a 60 m UAV at 3.5 GHz ($h_{\mathrm  {rx}} = 1.5$ m). The two-ray model produces a characteristic oscillatory pattern around the FSPL baseline, corresponding to alternating zones of constructive and destructive interference.}}{12}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:tworay_pl}{{4}{12}{Schematic comparison of FSPL and the coherent two-ray model for a 60 m UAV at 3.5 GHz ($h_{\mathrm {rx}} = 1.5$ m). The two-ray model produces a characteristic oscillatory pattern around the FSPL baseline, corresponding to alternating zones of constructive and destructive interference}{figure.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}NLoS branch}{12}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:nlos_branch}{{4.3}{12}{NLoS branch}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Stage 1: raw NLoS propagation prior}{12}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{COST-231 term.}{12}{section*.18}\protected@file@percent }
+\citation{khawaja_survey}
+\citation{wocc2021}
+\citation{tr38901}
+\newlabel{eq:cost231}{{18}{13}{COST-231 term}{equation.4.18}{}}
+\newlabel{eq:cost231_a}{{19}{13}{COST-231 term}{equation.4.19}{}}
+\@writefile{toc}{\contentsline {paragraph}{Interpretation of Eq.\nobreakspace  {}\eqref  {eq:cost231}.}{13}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Elevation-aware UAV envelope.}{13}{section*.20}\protected@file@percent }
+\newlabel{eq:a2g_nlos}{{20}{13}{Elevation-aware UAV envelope}{equation.4.20}{}}
+\newlabel{eq:lambda0}{{21}{13}{Elevation-aware UAV envelope}{equation.4.21}{}}
+\@writefile{toc}{\contentsline {paragraph}{Interpretation of Eq.\nobreakspace  {}\eqref  {eq:a2g_nlos}.}{13}{section*.21}\protected@file@percent }
+\newlabel{eq:nlos_raw}{{22}{14}{Interpretation of Eq.~\eqref {eq:a2g_nlos}}{equation.4.22}{}}
+\newlabel{eq:pl0}{{23}{14}{Interpretation of Eq.~\eqref {eq:a2g_nlos}}{equation.4.23}{}}
+\newlabel{eq:los_blend}{{24}{14}{Interpretation of Eq.~\eqref {eq:a2g_nlos}}{equation.4.24}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.2}Stage 2: map-derived morphology features}{14}{subsubsection.4.3.2}\protected@file@percent }
+\newlabel{eq:x78}{{25}{14}{Stage 2: map-derived morphology features}{equation.4.25}{}}
+\@writefile{toc}{\contentsline {paragraph}{Base masks.}{14}{section*.22}\protected@file@percent }
+\newlabel{eq:ground_mask}{{26}{14}{Base masks}{equation.4.26}{}}
+\newlabel{eq:nlos_mask}{{27}{14}{Base masks}{equation.4.27}{}}
+\@writefile{toc}{\contentsline {paragraph}{Quadratic raw-prior feature.}{15}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Distance term.}{15}{section*.24}\protected@file@percent }
+\newlabel{par:boxmean}{{4.3.2}{15}{Per-pixel box-mean operator}{section*.25}{}}
+\@writefile{toc}{\contentsline {paragraph}{Per-pixel box-mean operator.}{15}{section*.25}\protected@file@percent }
+\newlabel{eq:boxmean}{{28}{15}{Per-pixel box-mean operator}{equation.4.28}{}}
+\newlabel{eq:sat}{{29}{15}{Per-pixel box-mean operator}{equation.4.29}{}}
+\@writefile{toc}{\contentsline {paragraph}{Multiscale building density.}{15}{section*.26}\protected@file@percent }
+\newlabel{eq:rho_k}{{30}{15}{Multiscale building density}{equation.4.30}{}}
+\@writefile{toc}{\contentsline {paragraph}{Multiscale building height.}{15}{section*.27}\protected@file@percent }
+\newlabel{eq:h_k}{{31}{15}{Multiscale building height}{equation.4.31}{}}
+\newlabel{eq:h_k_interp}{{32}{15}{Multiscale building height}{equation.4.32}{}}
+\newlabel{eq:mean_bldg_height}{{33}{16}{Multiscale building height}{equation.4.33}{}}
+\@writefile{toc}{\contentsline {paragraph}{Multiscale NLoS-support.}{16}{section*.28}\protected@file@percent }
+\newlabel{eq:n_k}{{34}{16}{Multiscale NLoS-support}{equation.4.34}{}}
+\newlabel{eq:n_k_interp}{{35}{16}{Multiscale NLoS-support}{equation.4.35}{}}
+\@writefile{toc}{\contentsline {paragraph}{Elevation angle.}{16}{section*.29}\protected@file@percent }
+\newlabel{eq:theta}{{37}{16}{Elevation angle}{equation.4.37}{}}
+\newlabel{eq:theta_norm}{{38}{16}{Elevation angle}{equation.4.38}{}}
+\@writefile{toc}{\contentsline {paragraph}{Shadowing proxy.}{16}{section*.30}\protected@file@percent }
+\newlabel{eq:sigma_los}{{39}{16}{Shadowing proxy}{equation.4.39}{}}
+\newlabel{eq:sigma_nlos}{{40}{16}{Shadowing proxy}{equation.4.40}{}}
+\newlabel{eq:sigma_blend}{{41}{17}{Shadowing proxy}{equation.4.41}{}}
+\@writefile{toc}{\contentsline {paragraph}{Interaction terms.}{17}{section*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.3}Stage 3: regime-wise linear calibration}{17}{subsubsection.4.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{How topology class and antenna bin are computed.}{17}{section*.32}\protected@file@percent }
+\newlabel{eq:global_density}{{42}{17}{How topology class and antenna bin are computed}{equation.4.42}{}}
+\newlabel{eq:global_mean_bldg_height}{{43}{17}{How topology class and antenna bin are computed}{equation.4.43}{}}
+\newlabel{eq:topo6}{{44}{17}{How topology class and antenna bin are computed}{equation.4.44}{}}
+\newlabel{eq:ant_bin}{{45}{18}{How topology class and antenna bin are computed}{equation.4.45}{}}
+\newlabel{eq:pl_cal}{{46}{18}{How topology class and antenna bin are computed}{equation.4.46}{}}
+\@writefile{toc}{\contentsline {paragraph}{How $\beta ^{78}_{r}$ is fitted.}{18}{section*.33}\protected@file@percent }
+\newlabel{eq:ols}{{47}{18}{How $\beta ^{78}_{r}$ is fitted}{equation.4.47}{}}
+\newlabel{eq:ols_closed}{{48}{18}{How $\beta ^{78}_{r}$ is fitted}{equation.4.48}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.4}Stage 4: region replacement and clipping}{18}{subsubsection.4.3.4}\protected@file@percent }
+\newlabel{eq:pl_nlos_final}{{49}{18}{Stage 4: region replacement and clipping}{equation.4.49}{}}
+\newlabel{eq:pl_hybrid}{{50}{18}{Stage 4: region replacement and clipping}{equation.4.50}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Evaluation metric: pixel-weighted RMSE}{18}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:pw_metric}{{4.4}{18}{Evaluation metric: pixel-weighted RMSE}{subsection.4.4}{}}
+\newlabel{eq:rmse_pw}{{51}{19}{Evaluation metric: pixel-weighted RMSE}{equation.4.51}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Observed Try 78 results}{19}{subsection.4.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Try 78 pixel-weighted RMSE (dB) on the evaluation split. The ``Role'' column indicates whether the model is used as a frozen prior in \texttt  {Try 80}, serves only as an ablation baseline, or is an intermediate construction step.}}{19}{table.caption.34}\protected@file@percent }
+\newlabel{tab:try78_rmse}{{2}{19}{Try 78 pixel-weighted RMSE (dB) on the evaluation split. The ``Role'' column indicates whether the model is used as a frozen prior in \texttt {Try 80}, serves only as an ablation baseline, or is an intermediate construction step}{table.caption.34}{}}
+\@writefile{toc}{\contentsline {paragraph}{Why do Coherent two-ray (LoS) and Hybrid LoS show the same RMSE?}{19}{section*.35}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Try 78 pixel-weighted RMSE values. The coherent two-ray model reduces LoS RMSE from 3.95 dB (FSPL) to 1.75 dB, a gain of 2.2 dB.}}{20}{figure.caption.36}\protected@file@percent }
+\newlabel{fig:try78_rmse}{{5}{20}{Try 78 pixel-weighted RMSE values. The coherent two-ray model reduces LoS RMSE from 3.95 dB (FSPL) to 1.75 dB, a gain of 2.2 dB}{figure.caption.36}{}}
+\citation{tr38901}
+\citation{winner2}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Pipeline for the \texttt  {Try 78} hybrid path loss prior. The LoS branch relies on an explicit two-ray interference model, while the NLoS branch calibrates a raw prior against map-derived morphology features using regime-wise OLS. The two branches are hard-switched based on the LoS mask to produce the final frozen prior.}}{21}{figure.caption.37}\protected@file@percent }
+\newlabel{fig:try78_pipeline}{{6}{21}{Pipeline for the \texttt {Try 78} hybrid path loss prior. The LoS branch relies on an explicit two-ray interference model, while the NLoS branch calibrates a raw prior against map-derived morphology features using regime-wise OLS. The two branches are hard-switched based on the LoS mask to produce the final frozen prior}{figure.caption.37}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Try 79: Delay and Angular Spread Priors}{21}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Physical motivation for log-domain modeling}{21}{subsection.5.1}\protected@file@percent }
+\citation{tr38901}
+\newlabel{eq:log_transform}{{52}{22}{Physical motivation for log-domain modeling}{equation.5.52}{}}
+\newlabel{eq:log_invert}{{53}{22}{Physical motivation for log-domain modeling}{equation.5.53}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Raw spread prior in log domain}{22}{subsection.5.2}\protected@file@percent }
+\newlabel{eq:raw_spread}{{54}{22}{Raw spread prior in log domain}{equation.5.54}{}}
+\@writefile{toc}{\contentsline {paragraph}{Interpretation of each term.}{22}{section*.38}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Calibrated spread prior}{22}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.1}Stage 2: richer design matrix}{22}{subsubsection.5.3.1}\protected@file@percent }
+\newlabel{eq:x79}{{55}{23}{Stage 2: richer design matrix}{equation.5.55}{}}
+\@writefile{toc}{\contentsline {paragraph}{Normalized transmitter height.}{23}{section*.39}\protected@file@percent }
+\newlabel{eq:hnorm}{{56}{23}{Normalized transmitter height}{equation.5.56}{}}
+\@writefile{toc}{\contentsline {paragraph}{Blocker depth.}{23}{section*.40}\protected@file@percent }
+\newlabel{eq:b41}{{57}{23}{Blocker depth}{equation.5.57}{}}
+\@writefile{toc}{\contentsline {paragraph}{Transmitter clearance.}{23}{section*.41}\protected@file@percent }
+\newlabel{eq:clearance}{{58}{23}{Transmitter clearance}{equation.5.58}{}}
+\newlabel{eq:c41}{{59}{24}{Transmitter clearance}{equation.5.59}{}}
+\@writefile{toc}{\contentsline {paragraph}{Taller-building fraction.}{24}{section*.42}\protected@file@percent }
+\newlabel{eq:t_raw}{{60}{24}{Taller-building fraction}{equation.5.60}{}}
+\newlabel{eq:t41}{{61}{24}{Taller-building fraction}{equation.5.61}{}}
+\@writefile{toc}{\contentsline {paragraph}{Interaction terms.}{24}{section*.43}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.2}Stage 3: regime-wise ridge regression}{24}{subsubsection.5.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Calibration fitting algorithm.}{24}{section*.44}\protected@file@percent }
+\newlabel{eq:ridge}{{68}{24}{Calibration fitting algorithm}{equation.5.68}{}}
+\@writefile{toc}{\contentsline {paragraph}{Normal equations.}{25}{section*.45}\protected@file@percent }
+\newlabel{eq:normal_eqs}{{69}{25}{Normal equations}{equation.5.69}{}}
+\@writefile{toc}{\contentsline {paragraph}{Accumulation trick for large datasets.}{25}{section*.46}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Fallback hierarchy.}{25}{section*.47}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Example fitted coefficients.}{25}{section*.48}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.3.3}Stage 4: inverse transform and clipping}{26}{subsubsection.5.3.3}\protected@file@percent }
+\newlabel{eq:inv_log}{{72}{26}{Stage 4: inverse transform and clipping}{equation.5.72}{}}
+\newlabel{eq:spread_clip}{{73}{26}{Stage 4: inverse transform and clipping}{equation.5.73}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Schematic illustration of the regime-wise calibration. The raw log-domain prior $z^{(0)}$ (identity line) is mapped by the fitted linear model to the calibrated prediction $\hat  {z}$. Different regimes produce different calibration curves, allowing the model to correct for systematic biases in the raw prior on a per-scene basis.}}{26}{figure.caption.49}\protected@file@percent }
+\newlabel{fig:spread_cal}{{7}{26}{Schematic illustration of the regime-wise calibration. The raw log-domain prior $z^{(0)}$ (identity line) is mapped by the fitted linear model to the calibrated prediction $\hat {z}$. Different regimes produce different calibration curves, allowing the model to correct for systematic biases in the raw prior on a per-scene basis}{figure.caption.49}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Observed Try 79 results}{26}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.4.1}Delay spread}{27}{subsubsection.5.4.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Delay spread: calibrated test RMSE (ns) by topology class.}}{27}{table.caption.50}\protected@file@percent }
+\newlabel{tab:ds_topo}{{3}{27}{Delay spread: calibrated test RMSE (ns) by topology class}{table.caption.50}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Delay spread: calibrated test RMSE (ns) by antenna-height bin.}}{27}{table.caption.51}\protected@file@percent }
+\newlabel{tab:ds_ant}{{4}{27}{Delay spread: calibrated test RMSE (ns) by antenna-height bin}{table.caption.51}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.4.2}Angular spread}{27}{subsubsection.5.4.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Angular spread: calibrated test RMSE ($^\circ $) by topology class.}}{27}{table.caption.52}\protected@file@percent }
+\newlabel{tab:as_topo}{{5}{27}{Angular spread: calibrated test RMSE ($^\circ $) by topology class}{table.caption.52}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Angular spread: calibrated test RMSE ($^\circ $) by antenna-height bin.}}{27}{table.caption.53}\protected@file@percent }
+\newlabel{tab:as_ant}{{6}{27}{Angular spread: calibrated test RMSE ($^\circ $) by antenna-height bin}{table.caption.53}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Delay spread RMSE (ns) broken down by topology macro-group and antenna-height bin. High-altitude UAVs (high\_ant) consistently achieve the lowest RMSE across all topology groups.}}{28}{figure.caption.54}\protected@file@percent }
+\newlabel{fig:ds_macroexpert}{{8}{28}{Delay spread RMSE (ns) broken down by topology macro-group and antenna-height bin. High-altitude UAVs (high\_ant) consistently achieve the lowest RMSE across all topology groups}{figure.caption.54}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Angular spread RMSE ($^\circ $) broken down by topology macro-group and antenna-height bin. The LoS RMSE is notably higher than NLoS RMSE in dense scenarios because LoS angular spread is dominated by a direct ray spike, which is harder to localize precisely.}}{28}{figure.caption.55}\protected@file@percent }
+\newlabel{fig:as_macroexpert}{{9}{28}{Angular spread RMSE ($^\circ $) broken down by topology macro-group and antenna-height bin. The LoS RMSE is notably higher than NLoS RMSE in dense scenarios because LoS angular spread is dominated by a direct ray spike, which is harder to localize precisely}{figure.caption.55}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Pipeline for the \texttt  {Try 79} delay and angular spread priors. Both spread modalities share this identical linear architecture. They predict the expected spread in the log domain using regime-wise ridge regression over 23 spatial and geometric features.}}{29}{figure.caption.56}\protected@file@percent }
+\newlabel{fig:try79_pipeline}{{10}{29}{Pipeline for the \texttt {Try 79} delay and angular spread priors. Both spread modalities share this identical linear architecture. They predict the expected spread in the log domain using regime-wise ridge regression over 23 spatial and geometric features}{figure.caption.56}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}What is reused in Try 80, and what is new}{29}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}What is not new in Try 80}{29}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}What is new in Try 80}{29}{subsection.6.2}\protected@file@percent }
+\newlabel{eq:try80_mu}{{74}{30}{What is new in Try 80}{equation.6.74}{}}
+\newlabel{eq:try80_point}{{75}{30}{What is new in Try 80}{equation.6.75}{}}
+\newlabel{eq:try80_loss}{{76}{30}{What is new in Try 80}{equation.6.76}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.2.1}Architecture: Shared UNet with FiLM}{30}{subsubsection.6.2.1}\protected@file@percent }
+\newlabel{eq:film}{{77}{31}{Architecture: Shared UNet with FiLM}{equation.6.77}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Schematic of the \texttt  {Try 80} Shared UNet architecture with FiLM conditioning. The UAV height is encoded into a condition vector $\mathbf  {c}$ and injected dynamically into multiple layers of the encoder and decoder. The architecture explicitly bifurcates into a Global Head (predicting map-level GMM constants from pooled features) and a Local Head (predicting per-pixel refinements from the high-resolution decoder output).}}{32}{figure.caption.57}\protected@file@percent }
+\newlabel{fig:try80_arch}{{11}{32}{Schematic of the \texttt {Try 80} Shared UNet architecture with FiLM conditioning. The UAV height is encoded into a condition vector $\mathbf {c}$ and injected dynamically into multiple layers of the encoder and decoder. The architecture explicitly bifurcates into a Global Head (predicting map-level GMM constants from pooled features) and a Local Head (predicting per-pixel refinements from the high-resolution decoder output)}{figure.caption.57}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {6.2.2}Composite Optimization Objective}{32}{subsubsection.6.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Why these changes were made}{33}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Summary}{33}{section.8}\protected@file@percent }
+\bibcite{tr38901}{1}
+\bibcite{winner2}{2}
+\bibcite{wocc2021}{3}
+\bibcite{khawaja_survey}{4}
+\bibcite{cai2019}{5}
+\bibcite{izydorczyk2019}{6}
+\bibcite{rappaport}{7}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Sources}{34}{section.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1}Project sources}{34}{subsection.9.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2}Literature sources}{34}{subsection.9.2}\protected@file@percent }
+\gdef \@abspage@last{34}

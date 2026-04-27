@@ -1,0 +1,42 @@
+{
+  "status": "done",
+  "started_at_utc": "2026-04-22T10:07:01.489208+00:00",
+  "updated_at_utc": "2026-04-22T10:13:34.382620+00:00",
+  "device": "privateuseone:0",
+  "phase": "done",
+  "out_dir": "test_eval_test_verify",
+  "metrics": [
+    "delay_spread",
+    "angular_spread"
+  ],
+  "n_train_samples": 10840,
+  "n_eval_samples": 2590,
+  "processed_samples": 2590,
+  "progress_ratio": 0.0,
+  "n_regimes_fitted": 114,
+  "aggregate_so_far": {
+    "delay_spread": {
+      "n_samples": 2590,
+      "raw_rmse_overall_pw": 65.36506926682377,
+      "calib_rmse_overall_pw": 28.10229302670089,
+      "raw_mae_overall_pw": 43.023123625916845,
+      "calib_mae_overall_pw": 7.303260608136133,
+      "raw_rmse_los_pw": 28.038727166423378,
+      "calib_rmse_los_pw": 27.48514150250091,
+      "raw_rmse_nlos_pw": 114.67202998760585,
+      "calib_rmse_nlos_pw": 29.61567181029861
+    },
+    "angular_spread": {
+      "n_samples": 2590,
+      "raw_rmse_overall_pw": 22.350444273798743,
+      "calib_rmse_overall_pw": 13.741648462148165,
+      "raw_mae_overall_pw": 17.357191665535517,
+      "calib_mae_overall_pw": 4.989016052256584,
+      "raw_rmse_los_pw": 14.61712426341921,
+      "calib_rmse_los_pw": 15.281756366231416,
+      "raw_rmse_nlos_pw": 35.03500334135496,
+      "calib_rmse_nlos_pw": 8.661434466257939
+    }
+  },
+  "error": null
+}

@@ -1,0 +1,61 @@
+seed: 42
+data:
+  hdf5_path: ../../Datasets/CKM_Dataset_270326.h5
+  image_size: 513
+  val_ratio: 0.15
+  test_ratio: 0.15
+  split_seed: 42
+  topology_norm_m: 90.0
+  path_loss_no_data_mask_column: path_loss_no_data_mask
+  derive_no_data_from_non_ground: true
+  augment_d4: true
+  precomputed_priors_hdf5_path: ../../Datasets/try80_precomputed_priors.h5
+
+prior:
+  try78_los_calibration_json: ../calibrations/try78_los_two_ray_calibration.json
+  try78_nlos_calibration_json: ../calibrations/try78_nlos_regime_calibration.json
+  try79_calibration_json: ../calibrations/try79_calibration.json
+
+model:
+  in_channels: 9
+  cond_dim: 128
+  height_embed_dim: 32
+  base_width: 96
+  num_components: 3
+  decoder_dropout: 0.10
+  alpha_bias: -2.0
+  sigma_min: 0.05
+  sigma_max: 3.0
+  path_residual_los_max: 5.0
+  path_residual_nlos_max: 20.0
+  delay_residual_los_max: 40.0
+  delay_residual_nlos_max: 40.0
+  angular_residual_los_max: 15.0
+  angular_residual_nlos_max: 13.0
+
+losses:
+  map_nll: 1.0
+  dist_kl: 0.25
+  moment_match: 0.10
+  anchor: 0.05
+  prior_guard: 0.10
+  outlier_budget: 0.02
+  outlier_budget_threshold: 0.60
+  rmse: 0.40
+  mae: 0.10
+
+training:
+  optimizer: adamw
+  lr: 2.0e-4
+  weight_decay: 0.01
+  warmup_epochs: 2
+  epochs: 180
+  batch_size: 1
+  grad_accum_steps: 8
+  patience: 20
+  num_workers: 6
+
+runtime:
+  device: cuda
+  output_dir: outputs/try80_joint_big_relaxed_residuals
+  resume_checkpoint: outputs/try80_joint_big_relaxed_residuals/best_model.pt

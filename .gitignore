@@ -1,0 +1,21 @@
+# Local model weights.
+# Keep the current checkpoint on disk, but do not commit it until Git LFS is enabled.
+models/*.pt
+models/*.pth
+models/*.ckpt
+models/*.safetensors
+
+# Generated outputs and manual test exports.
+outputs/
+inputs_prueba/
+cache/
+
+# Runtime logs and Python build artifacts.
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environments.
+.venv/
+venv/

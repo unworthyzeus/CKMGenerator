@@ -1,0 +1,25 @@
+[project]
+name = "ckm-generator"
+version = "0.1.0"
+description = "Standalone CKM final generator for LoS/NLoS masks, Try 78/79 priors, and Try 80 predictions."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "h5py",
+  "pillow",
+  "matplotlib",
+  "pyyaml",
+  "scipy",
+  "torch",
+  "streamlit",
+]
+
+[project.scripts]
+ckm-generate = "ckm_generator.cli:main"
+ckm-doctor = "ckm_generator.doctor:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,33 @@
+{
+  "status": "done",
+  "started_at_utc": "2026-04-21T22:32:50.347266+00:00",
+  "updated_at_utc": "2026-04-21T22:41:23.849792+00:00",
+  "device": "privateuseone:0",
+  "out_dir": "C:\\TFG\\TFGpractice\\TFGSeventyEighthTry78\\hybrid_out_final_dml",
+  "n_fit_samples": 11185,
+  "n_eval_samples": 4995,
+  "processed_eval_samples": 4995,
+  "progress_ratio": 1.0,
+  "aggregate_so_far": {
+    "fspl_rmse_los_pw": 3.9539644994860375,
+    "radial_rmse_los_pw": 3.70856484907511,
+    "two_ray_rmse_los_pw": 1.7515788120972713,
+    "hybrid_rmse_los_pw": 1.7515788120972713,
+    "hybrid_rmse_nlos_pw": 3.3966934939557807,
+    "hybrid_rmse_overall_pw": 1.9246193250484516,
+    "total_valid_pixels": 788710653,
+    "total_los_pixels": 729471789,
+    "total_nlos_pixels": 59238864
+  },
+  "last_sample": {
+    "city": "Mexico City",
+    "sample": "sample_10050",
+    "uav_height_m": 86.53085327148438,
+    "n_los": 38496,
+    "n_nlos": 31686,
+    "two_ray_los_rmse": 2.745680634035734,
+    "hybrid_overall_rmse": 3.526549401683065,
+    "hybrid_nlos_rmse": 4.288003836089086
+  },
+  "error": null
+}
