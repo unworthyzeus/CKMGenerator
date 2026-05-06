@@ -53,14 +53,26 @@ Use `--out C:\path\chosen_folder` to write somewhere specific.
 
 Includes:
 
-- `models/best_model.pt`: local current Try 80 checkpoint copied from `try80_joint_huge_pathloss_finetune`.
+- `models/best_model.pt`: current Try 80 checkpoint copied from `try80_joint_huge_pathloss_finetune`, tracked with Git LFS.
 - `calibrations/`: frozen Try 78/79 calibration JSONs used by Try 80.
 - `src/ckm_generator/`: clean generator interface, CLI, Streamlit app, loaders, LoS/NLoS ray-caster, plotting.
 - `vendor/`: full copied code for Try 80, Try 78, Try 79, and the preliminary final Try 80 bundle.
 
-`models/best_model.pt` is intentionally ignored by Git for now because the
-checkpoint is larger than GitHub's regular file limit. Keep it locally under
-`models/`, or pass `--checkpoint C:\path\best_model.pt`.
+`models/best_model.pt` is stored through Git LFS because the checkpoint is
+larger than GitHub's regular file limit. After cloning, run `git lfs pull` if
+the checkpoint was not downloaded automatically, or pass
+`--checkpoint C:\path\best_model.pt` to use another compatible checkpoint.
+
+## Published Model Checkpoint
+
+The final checkpoint is published with the repository through Git LFS:
+
+- Path: `models/best_model.pt`
+- Size: 322,553,518 bytes
+- SHA256: `0C245DE7D7D090D12563D17DC5C3D2E1DE9ED96C32DEBC8461E15CAC7A7C9E25`
+
+The source repository remains lightweight because Git stores only an LFS pointer
+in normal history while the checkpoint bytes are stored as a large-file object.
 
 ## Supported Inputs
 
@@ -651,16 +663,12 @@ expected to match CKM bit-for-bit.
 
 Replace `models/best_model.pt` with the newer compatible Try 80 checkpoint. If the architecture changes, update `config/generator_config.yaml` under `model.model_cfg`.
 
-## Future Git LFS
+## Updating the LFS Checkpoint
 
-When the repository is ready to version model checkpoints, enable Git LFS and
-track weights explicitly instead of committing raw `.pt` files:
+When replacing the checkpoint, keep the file at `models/best_model.pt`, verify
+the application still loads it, then commit the updated LFS object:
 
 ```powershell
-git lfs install
-git lfs track "models/*.pt"
-git add .gitattributes models/best_model.pt
-git commit -m "Track model checkpoint with Git LFS"
+git add models/best_model.pt
+git commit -m "Update final CKM checkpoint"
 ```
-
-Until then, checkpoint files stay in `.gitignore`.
