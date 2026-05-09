@@ -619,6 +619,22 @@ For large image-only batches, provided masks are faster and more reproducible
 than generated masks. If no masks are provided, the geometric ray-caster must
 compute LoS/NLoS from the topology and antenna height.
 
+## Conclusions / Soon-Medium Work
+
+Two practical next steps are worth keeping close to the current generator and
+Try 80 line:
+
+- Train or fine-tune specialist checkpoints for specific urban typologies, such
+  as dense high-rise, compact mid-rise, open low-rise, or other topology classes
+  already inferred by the prior pipeline. This would test whether a smaller
+  topology-specific adaptation can recover local structure that a single global
+  model smooths over.
+- For delay and angular spreads, try fine-tuning objectives where map structure
+  matters more than pure RMSE. Candidate losses include SSIM/correlation terms,
+  gradient or edge consistency, region-wise ranking, and LoS/NLoS boundary
+  consistency, so the predicted spread fields preserve the right spatial
+  patterns even when the absolute pixel-wise RMSE is not the only target.
+
 ## Export Manual Test Inputs
 
 To export 100 interface-ready samples spread across cities:
