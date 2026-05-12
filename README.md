@@ -170,13 +170,14 @@ C:\TFG\.venv\Scripts\python.exe C:\TFG\CKMGenerator\ckm_generate.py `
   --run-name topology_demo
 ```
 
-Use `--no-save-arrays` to skip numeric `.npz` matrices, or `--no-save-masks`
-to skip LoS/NLoS PNG files. For bulk model inference, `--batch-size 2` or
+By default the CLI writes the fast numeric `.npz` archive and metadata only.
+Use `--save-masks` to add LoS/NLoS PNG files, `--save-visual-maps` to add
+rendered prior/prediction PNG figures, or `--compress-arrays` to trade slower
+exports for smaller `.npz` files. For bulk model inference, `--batch-size 2` or
 `--batch-size 3` can be faster on CUDA GPUs with enough VRAM. Add
-`--mixed-precision` to use CUDA fp16 autocast. Use `--no-save-visual-maps` to
-skip prior/prediction figure PNGs and keep only arrays, masks, and metadata.
+`--mixed-precision` to use CUDA fp16 autocast.
 
-Outputs are named with sample and antenna height:
+Optional outputs are named with sample and antenna height:
 
 - `masks/*_los_mask.png`
 - `masks/*_nlos_mask.png`
@@ -194,7 +195,8 @@ Outputs are named with sample and antenna height:
 
 ## Non-PNG Outputs
 
-Numeric outputs are saved as compressed NumPy archives:
+Numeric outputs are saved as NumPy `.npz` archives. They are uncompressed by
+default for speed and can be compressed with `--compress-arrays`:
 
 ```text
 outputs/runs/<run>/
@@ -244,9 +246,9 @@ The metadata JSON stores run bookkeeping and paths:
 - `metadata`: original loader metadata such as HDF5 group/source details.
 - `files`: paths to every file written for that sample.
 
-`--no-save-visual-maps` only skips rendered prior/prediction PNG figures. It
-does not remove `.npz` arrays or metadata JSON unless `--no-save-arrays` is also
-used.
+Rendered prior/prediction PNG figures and mask PNG files are optional exports.
+Leaving them disabled keeps batch generation close to the model runtime; the
+`.npz` archive still contains the numeric masks, priors, and predictions.
 
 ## Mixed Precision
 
@@ -288,8 +290,10 @@ C:\TFG\.venv\Scripts\python.exe -m streamlit run C:\TFG\CKMGenerator\ckm_app.py
 
 The sidebar has an output selector: create a new timestamped run under
 `outputs/runs`, reuse an existing output folder, or enter a custom path.
-It also has export toggles for numeric arrays (`.npz`), LoS/NLoS mask PNGs,
-and visual prior/prediction PNGs. `Model batch size` controls how many samples
+It also has export toggles for numeric arrays (`.npz`), optional compression,
+LoS/NLoS mask PNGs, and visual prior/prediction PNGs. The fast default is
+numeric arrays plus metadata only; image exports remain available for inspection
+but are disabled by default for batch speed. `Model batch size` controls how many samples
 are sent through the final residual GMM-head model at once; higher values are faster if the GPU
 has enough VRAM. `CUDA mixed precision` is optional and trades tiny numeric
 differences for speed on supported NVIDIA GPUs.
@@ -450,8 +454,9 @@ The terminal interface exposes equivalent controls:
 - `--batch-size`: model batch size.
 - `--mixed-precision`: CUDA autocast inference.
 - `--save-arrays` / `--no-save-arrays`: enable or disable `.npz` output.
-- `--save-masks` / `--no-save-masks`: enable or disable mask PNG output.
-- `--save-visual-maps` / `--no-save-visual-maps`: enable or disable rendered prior/prediction PNG figures.
+- `--compress-arrays` / `--no-compress-arrays`: enable or disable `.npz` compression.
+- `--save-masks` / `--no-save-masks`: enable or disable optional mask PNG output.
+- `--save-visual-maps` / `--no-save-visual-maps`: enable or disable optional rendered prior/prediction PNG figures.
 - `--los-mask` and `--nlos-mask`: explicit sidecar masks for non-HDF5 inputs.
 - `--topology-max-m`: image-only height normalization maximum.
 - `--image-values-are-metres`: image-only raw metre mode.
@@ -620,7 +625,9 @@ The main performance controls are:
 - `CUDA mixed precision`: uses PyTorch CUDA autocast and was measured on all 50 Barcelona samples as about `1.16x` faster for prediction on the local RTX 3050 Ti Laptop GPU, with RMSE differences versus fp32 of `0.0014 dB`, `0.0028 ns`, and `0.0025 deg`.
 - `LoS backend`: `auto` uses the CUDA vectorized ray-caster when the generator is running on CUDA, while preserving the original GT ray-caster mask exactly on validated samples.
 - `Prior backend`: `auto` uses the selected torch runtime when available. It can also be forced to `numpy`, `torch`, `cuda`, `directml`, or `torch-cpu`.
-- `Save visual map PNGs`: disabling this speeds up batch exports by avoiding Matplotlib rendering. Numeric arrays and metadata can still be saved.
+- `Save numeric arrays (.npz)`: the authoritative fast output; compression is optional and slower.
+- `Save LoS/NLoS mask PNGs`: optional visual mask files. The numeric masks are still stored in the `.npz`.
+- `Save visual map PNGs`: optional Matplotlib-rendered figures. Leave this off for batch exports.
 - `Run final residual model`: disabling this is useful when only masks, priors, and input validation are needed.
 
 On the Barcelona runtime benchmark, the prior backend reduced final calibrated-prior

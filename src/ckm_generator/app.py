@@ -78,12 +78,26 @@ def main() -> None:
             disabled=(not run_model or runtime_report.selected_device != "cuda"),
             help="Faster on many NVIDIA GPUs, but predictions can differ slightly from full fp32.",
         )
-        save_arrays = st.checkbox("Save numeric arrays (.npz)", value=True)
-        save_masks = st.checkbox("Save LoS/NLoS mask PNGs", value=True)
+        save_arrays = st.checkbox(
+            "Save numeric arrays (.npz)",
+            value=True,
+            help="Fast authoritative numeric export. Includes topology, masks, priors, and predictions.",
+        )
+        compress_arrays = st.checkbox(
+            "Compress numeric arrays",
+            value=False,
+            disabled=not save_arrays,
+            help="Smaller .npz files, but slower. Leave off for batch speed.",
+        )
+        save_masks = st.checkbox(
+            "Save LoS/NLoS mask PNGs",
+            value=False,
+            help="Optional visual mask files. Masks are still stored in the .npz arrays.",
+        )
         save_visual_maps = st.checkbox(
             "Save visual map PNGs",
-            value=True,
-            help="Saves prior/prediction PNG figures. Turn off for faster batch exports; arrays, masks, and metadata can still be saved.",
+            value=False,
+            help="Optional rendered prior/prediction figures. Leave off for faster batch exports; previews still appear in the app.",
         )
         topology_max_m = st.number_input(
             "Image max height (m)",
@@ -194,6 +208,7 @@ def main() -> None:
                 save_arrays=save_arrays,
                 save_masks=save_masks,
                 save_visual_maps=save_visual_maps,
+                compress_arrays=compress_arrays,
             )
             saved.append((result, files))
             progress.progress((save_offset + idx) / (len(paths) * phase_count), text=f"Saved {idx}/{len(paths)}")
@@ -207,6 +222,11 @@ def main() -> None:
     st.caption(f"Output: {out_dir}")
     if len(rendered) == 1:
         _render_result(*rendered[0])
+    elif len(rendered) > 6:
+        labels = [f"{idx:03d} | {result.sample_id}" for idx, (result, _) in enumerate(rendered, start=1)]
+        selected = st.selectbox("Sample", labels, index=0)
+        selected_idx = labels.index(selected)
+        _render_result(*rendered[selected_idx])
     else:
         tabs = st.tabs([result.sample_id for result, _ in rendered])
         for tab, (result, files) in zip(tabs, rendered):
@@ -225,7 +245,7 @@ def _render_result(result, files: dict[str, str]) -> None:
     if result.mask_source == "generated":
         st.warning("No provided LoS/NLoS mask was used for this sample; masks were ray-cast from topology + antenna height.")
     if result.mask_comparison:
-        st.json(result.mask_comparison.__dict__)
+        _render_mask_comparison(result.mask_comparison.__dict__)
 
     cols = st.columns(3)
     cols[0].image(_topology_display(result.topology), caption="Topology", use_container_width=True)
@@ -246,6 +266,30 @@ def _render_result(result, files: dict[str, str]) -> None:
                     caption=f"{label} ({unit})",
                     use_container_width=True,
                 )
+
+
+def _render_mask_comparison(comparison: dict[str, object]) -> None:
+    mismatches = int(comparison.get("mismatches", 0) or 0)
+    n_pixels = int(comparison.get("n_pixels", 0) or 0)
+    los_iou = float(comparison.get("los_iou", 0.0) or 0.0)
+    nlos_iou = float(comparison.get("nlos_iou", 0.0) or 0.0)
+    if mismatches == 0:
+        st.success(f"Mask validation: 0 mismatches over {n_pixels:,} pixels | LoS IoU={los_iou:.6f} | NLoS IoU={nlos_iou:.6f}")
+        return
+    st.warning(f"Mask validation: {mismatches:,} mismatches over {n_pixels:,} pixels")
+    st.dataframe(
+        [
+            {
+                "mismatch_fraction": comparison.get("mismatch_fraction", 0.0),
+                "false_los": comparison.get("false_los", 0),
+                "false_nlos": comparison.get("false_nlos", 0),
+                "los_iou": los_iou,
+                "nlos_iou": nlos_iou,
+            }
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _render_error(exc: Exception, trace: str) -> None:

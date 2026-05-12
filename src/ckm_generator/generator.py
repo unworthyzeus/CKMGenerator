@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, Optional, Sequence
@@ -266,11 +267,13 @@ class CKMGenerator:
         save_arrays: bool = True,
         save_masks: bool = True,
         save_visual_maps: bool = True,
+        compress_arrays: bool = False,
     ) -> Dict[str, str]:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         prefix = f"{slugify(result.sample_id)}_h{format_height(result.antenna_height_m)}m"
         written: Dict[str, str] = {}
+        timings: Dict[str, float] = {}
 
         mask_dir = out_dir / "masks"
         prior_dir = out_dir / "priors"
@@ -279,6 +282,7 @@ class CKMGenerator:
         meta_dir = out_dir / "metadata"
 
         if save_masks:
+            start = time.perf_counter()
             paths = {
                 "los_mask": mask_dir / f"{prefix}_los_mask.png",
                 "nlos_mask": mask_dir / f"{prefix}_nlos_mask.png",
@@ -288,8 +292,10 @@ class CKMGenerator:
             for key, path in paths.items():
                 save_mask_png(getattr(result, key), path)
                 written[key] = str(path)
+            timings["mask_png_s"] = time.perf_counter() - start
 
         if save_visual_maps:
+            start = time.perf_counter()
             for key, arr in result.priors.items():
                 title = f"{result.sample_id} | h={result.antenna_height_m:.2f} m | prior {key}"
                 unit = "dB" if "path_loss" in key else ("ns" if "delay" in key else "deg")
@@ -312,8 +318,10 @@ class CKMGenerator:
                     title=f"{result.sample_id} | antenna height {result.antenna_height_m:.2f} m",
                 )
                 written["pred_joint"] = str(joint_path)
+            timings["visual_png_s"] = time.perf_counter() - start
 
         if save_arrays:
+            start = time.perf_counter()
             array_dir.mkdir(parents=True, exist_ok=True)
             arrays = {
                 "topology": result.topology,
@@ -328,14 +336,30 @@ class CKMGenerator:
             if result.reference_los_mask is not None:
                 arrays["reference_los_mask"] = result.reference_los_mask
             npz_path = array_dir / f"{prefix}.npz"
-            np.savez_compressed(npz_path, **arrays)
+            if compress_arrays:
+                np.savez_compressed(npz_path, **arrays)
+            else:
+                np.savez(npz_path, **arrays)
             written["arrays"] = str(npz_path)
+            timings["arrays_npz_s"] = time.perf_counter() - start
 
-        metadata = self._metadata(result, written)
+        metadata = self._metadata(
+            result,
+            written,
+            save_options={
+                "save_arrays": save_arrays,
+                "compress_arrays": compress_arrays,
+                "save_masks": save_masks,
+                "save_visual_maps": save_visual_maps,
+            },
+            save_timings_s=timings,
+        )
         meta_dir.mkdir(parents=True, exist_ok=True)
+        start = time.perf_counter()
         meta_path = meta_dir / f"{prefix}.json"
         meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         written["metadata"] = str(meta_path)
+        timings["metadata_json_s"] = time.perf_counter() - start
         return written
 
     def _predict(
@@ -503,7 +527,14 @@ class CKMGenerator:
         arr = fit_array_to_model_grid(mask, image_size=513, is_mask=True, source="sample mask")
         return normalize_mask(arr)
 
-    def _metadata(self, result: PredictionResult, written: Dict[str, str]) -> Dict[str, object]:
+    def _metadata(
+        self,
+        result: PredictionResult,
+        written: Dict[str, str],
+        *,
+        save_options: Optional[Dict[str, object]] = None,
+        save_timings_s: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, object]:
         return {
             "sample_id": result.sample_id,
             "antenna_height_m": result.antenna_height_m,
@@ -518,6 +549,8 @@ class CKMGenerator:
             "raycast_comparison": asdict(result.raycast_comparison) if result.raycast_comparison else None,
             "metadata": result.metadata,
             "files": written,
+            "save_options": save_options or {},
+            "save_timings_s": save_timings_s or {},
         }
 
     def _resolve(self, value: object) -> Path:

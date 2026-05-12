@@ -26,8 +26,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=None, help="Model inference batch size. Defaults to the runtime recommendation.")
     parser.add_argument("--mixed-precision", action="store_true", help="Use CUDA fp16 autocast for model inference. Faster on many NVIDIA GPUs, with small numeric differences.")
     parser.add_argument("--save-arrays", action=argparse.BooleanOptionalAction, default=True, help="Save numeric .npz matrices for masks, priors, and predictions.")
-    parser.add_argument("--save-masks", action=argparse.BooleanOptionalAction, default=True, help="Save LoS/NLoS mask PNG files.")
-    parser.add_argument("--save-visual-maps", action=argparse.BooleanOptionalAction, default=True, help="Save prior/prediction PNG figures.")
+    parser.add_argument("--compress-arrays", action=argparse.BooleanOptionalAction, default=False, help="Compress .npz arrays. Smaller files but noticeably slower batch export.")
+    parser.add_argument("--save-masks", action=argparse.BooleanOptionalAction, default=False, help="Save LoS/NLoS mask PNG files. Masks are still included in the .npz arrays when --save-arrays is enabled.")
+    parser.add_argument("--save-visual-maps", action=argparse.BooleanOptionalAction, default=False, help="Save rendered prior/prediction PNG figures. Disabled by default for faster batch export.")
 
     parser.add_argument("--los-mask", type=Path, default=None, help="Optional LoS reference mask for non-HDF5 inputs.")
     parser.add_argument("--nlos-mask", type=Path, default=None, help="Optional NLoS reference mask for non-HDF5 inputs.")
@@ -104,6 +105,7 @@ def main() -> None:
                 save_arrays=args.save_arrays,
                 save_masks=args.save_masks,
                 save_visual_maps=args.save_visual_maps,
+                compress_arrays=args.compress_arrays,
             )
             summaries.append(
                 {

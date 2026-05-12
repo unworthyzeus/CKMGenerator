@@ -19,7 +19,7 @@ TASK_LABELS = {
 def save_mask_png(mask: np.ndarray, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     arr = (np.asarray(mask, dtype=np.float32) > 0.5).astype(np.uint8) * 255
-    Image.fromarray(arr, mode="L").save(path)
+    Image.fromarray(arr, mode="L").save(path, compress_level=1, optimize=False)
 
 
 def save_map_png(
@@ -55,7 +55,7 @@ def save_map_png(
     if unit:
         cbar.set_label(unit, fontsize=8)
     fig.tight_layout(pad=0.3)
-    fig.savefig(path)
+    fig.savefig(path, pil_kwargs={"compress_level": 1, "optimize": False})
     plt.close(fig)
 
 
@@ -81,5 +81,5 @@ def save_joint_prediction_png(predictions: Dict[str, np.ndarray], path: Path, *,
         cbar.set_label(unit, fontsize=8)
     fig.suptitle(title, fontsize=13)
     fig.tight_layout()
-    fig.savefig(path)
+    fig.savefig(path, pil_kwargs={"compress_level": 1, "optimize": False})
     plt.close(fig)
