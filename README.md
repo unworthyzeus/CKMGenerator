@@ -408,7 +408,7 @@ which the loader checks automatically.
 Optional antenna height can be read from HDF5/NPZ keys named `uav_height`,
 `antenna_height`, `antenna_height_m`, `height`, `height_m`, or `h_tx`. If no
 height is present, it must be supplied in the interface or with `--height`.
-The valid transmitter height range is `10 m` to `478 m`. Receiver height is
+The valid transmitter height range is `12 m` to `478 m`. Receiver height is
 fixed at `1.5 m`, matching the CKM calibration and final calibrated-prior formulas.
 
 ### Streamlit Controls

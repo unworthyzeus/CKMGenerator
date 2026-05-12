@@ -27,7 +27,7 @@ priors:
 io:
   image_size: 513
   topology_norm_m: 90.0
-  height_min_m: 10.0
+  height_min_m: 12.0
   height_max_m: 478.0
 
 los:

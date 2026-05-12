@@ -43,7 +43,7 @@ def main() -> None:
             accept_multiple_files=True,
             help="You can upload several topology/data files at once. LoS/NLoS sidecar mask files are kept available but not generated as separate samples.",
         )
-        height = st.number_input("Antenna height (m)", min_value=10.0, max_value=478.0, value=56.0, step=0.1, format="%.2f")
+        height = st.number_input("Antenna height (m)", min_value=12.0, max_value=478.0, value=56.0, step=0.1, format="%.2f")
         device = st.selectbox("Device", ["auto", "directml", "cpu", "cuda"], index=0)
         runtime_report = inspect_runtime(device)
         st.caption(f"Runtime: torch={runtime_report.torch_version or 'missing'} | selected={runtime_report.selected_device}")

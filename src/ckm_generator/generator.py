@@ -559,8 +559,8 @@ class CKMGenerator:
 
     @staticmethod
     def _validate_height(height_m: float) -> None:
-        if not (10.0 <= float(height_m) <= 478.0):
-            raise ValueError(f"antenna height must be between 10 m and 478 m, got {height_m}")
+        if not (12.0 <= float(height_m) <= 478.0):
+            raise ValueError(f"antenna height must be between 12 m and 478 m, got {height_m}")
 
     @staticmethod
     def _resolve_device(name: str):
