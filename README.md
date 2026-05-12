@@ -258,20 +258,21 @@ is needed. This usually lowers GPU memory bandwidth and compute cost, so it can
 run faster on NVIDIA GPUs. The tradeoff is tiny numerical differences from full
 fp32 output.
 
-Measured on 10 exported HDF5 samples from `inputs/samples`, using the RTX 3050
-Ti Laptop GPU in this machine, batch size 1, and timing model inference only:
+Measured on all 50 Barcelona HDF5 samples, using the RTX 3050 Ti Laptop GPU in
+this machine, batch size 1, and timing the model prediction stage after mask
+and prior preparation:
 
-- fp32: `6.94` to `6.99` seconds
-- mixed precision: `5.46` to `5.61` seconds
-- speedup: about `1.25x`
+- fp32: `34.03` seconds total, `0.681 s/sample`
+- mixed precision: `29.30` seconds total, `0.586 s/sample`
+- speedup: about `1.16x` for the prediction stage
 
 Mixed precision vs fp32 prediction differences over valid receiver pixels:
 
 | Task | RMSE | MAE | Max abs |
 | --- | ---: | ---: | ---: |
-| Path loss | `0.0016 dB` | `0.0010 dB` | `0.057 dB` |
-| Delay spread | `0.0034 ns` | `0.0017 ns` | `0.038 ns` |
-| Angular spread | `0.0030 deg` | `0.0013 deg` | `0.065 deg` |
+| Path loss | `0.0014 dB` | `0.0008 dB` | `0.051 dB` |
+| Delay spread | `0.0028 ns` | `0.0014 ns` | `0.050 ns` |
+| Angular spread | `0.0025 deg` | `0.0011 deg` | `0.077 deg` |
 
 Those differences are tiny compared with the Try 80 validation RMSE scale in
 `best_summary_val.json` (`1.62 dB`, `22.10 ns`, and `11.40 deg`
@@ -445,6 +446,7 @@ The terminal interface exposes equivalent controls:
 - `--checkpoint`: alternative Try 80 checkpoint path.
 - `--device auto|cpu|cuda|directml`: runtime selection.
 - `--mask-source auto|provided|generated`: mask policy.
+- `--prior-backend auto|numpy|torch|cuda|directml|torch-cpu`: prior runtime.
 - `--skip-model`: produce masks and priors but skip Try 80 inference.
 - `--batch-size`: model batch size.
 - `--mixed-precision`: CUDA autocast inference.
@@ -616,10 +618,16 @@ The main performance controls are:
 
 - `Device`: CUDA is preferred when available; CPU works but is slower.
 - `Model batch size`: can improve throughput on GPUs with enough VRAM.
-- `CUDA mixed precision`: uses PyTorch CUDA autocast and was measured on 10 exported samples as about `1.25x` faster on the local RTX 3050 Ti Laptop GPU, with RMSE differences versus fp32 of `0.0016 dB`, `0.0034 ns`, and `0.0030 deg`.
+- `CUDA mixed precision`: uses PyTorch CUDA autocast and was measured on all 50 Barcelona samples as about `1.16x` faster for prediction on the local RTX 3050 Ti Laptop GPU, with RMSE differences versus fp32 of `0.0014 dB`, `0.0028 ns`, and `0.0025 deg`.
 - `LoS backend`: `auto` uses the CUDA vectorized ray-caster when the generator is running on CUDA, while preserving the original GT ray-caster mask exactly on validated samples.
+- `Prior backend`: `auto` uses the selected torch runtime when available. It can also be forced to `numpy`, `torch`, `cuda`, `directml`, or `torch-cpu`.
 - `Save visual map PNGs`: disabling this speeds up batch exports by avoiding Matplotlib rendering. Numeric arrays and metadata can still be saved.
 - `Run Try 80 model`: disabling this is useful when only masks, priors, and input validation are needed.
+
+On the Barcelona runtime benchmark, the prior backend reduced Try 78/79 prior
+evaluation from about `0.41 s/sample` with NumPy to about `0.04 s/sample` with
+torch/CUDA. On all 50 stored Barcelona samples, the resulting model RMSE stayed
+unchanged at thesis scale.
 
 For large image-only batches, provided masks are faster and more reproducible
 than generated masks. If no masks are provided, the geometric ray-caster must

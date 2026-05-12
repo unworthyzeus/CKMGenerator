@@ -70,6 +70,7 @@ class CKMGenerator:
             try78_los_calibration_json=self._resolve(prior_cfg.get("try78_los_calibration_json", "calibrations/try78_los_two_ray_calibration.json")),
             try78_nlos_calibration_json=self._resolve(prior_cfg.get("try78_nlos_calibration_json", "calibrations/try78_nlos_regime_calibration.json")),
             try79_calibration_json=self._resolve(prior_cfg.get("try79_calibration_json", "calibrations/try79_calibration.json")),
+            backend=str(prior_cfg.get("backend", "numpy")),
         )
         if load_model:
             self.load_model()
@@ -110,6 +111,7 @@ class CKMGenerator:
             raise RuntimeDependencyError(f"Could not move/load Try 80 model on {report.selected_device}: {type(exc).__name__}: {exc}") from exc
         model.eval()
         self.model = model
+        self._configure_prior_backend()
 
     def predict_results(
         self,
@@ -208,6 +210,7 @@ class CKMGenerator:
         nlos = compute_nlos_mask(topology, los)
         generated_nlos = compute_nlos_mask(topology, generated_los)
 
+        self._configure_prior_backend()
         priors_obj = self.prior_computer.compute(topology, los, h_m)
         priors = {
             "path_loss": priors_obj.path_loss_prior,
@@ -459,6 +462,20 @@ class CKMGenerator:
 
     def _uses_cuda(self) -> bool:
         return str(getattr(self.runtime_report, "selected_device", "")).lower() == "cuda"
+
+    def _uses_torch_accelerator(self) -> bool:
+        return str(getattr(self.runtime_report, "selected_device", "")).lower() in {"cuda", "directml"}
+
+    def _configure_prior_backend(self) -> None:
+        prior_cfg = self.config.get("priors", {})
+        backend = str(prior_cfg.get("backend", "numpy")).lower()
+        if backend == "auto":
+            backend = "torch" if self._uses_torch_accelerator() else "auto"
+        self.prior_computer.backend = backend
+        if backend in {"cpu", "torch-cpu", "torch_cpu"}:
+            self.prior_computer.torch_device = None
+        else:
+            self.prior_computer.torch_device = self.device if backend in {"torch", "cuda", "directml", "auto"} and self.device is not None else None
 
     def _empty_cuda_cache(self) -> None:
         if not self._uses_cuda():

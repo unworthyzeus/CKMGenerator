@@ -5,7 +5,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -134,6 +134,7 @@ _RADIUS_PX = np.rint(_D2D / METERS_PER_PIXEL).astype(np.int16)
 _MAX_RADIUS_PX = int(_RADIUS_PX.max())
 _WAVELENGTH_M = 0.299792458 / FREQ_GHZ
 _WAVENUMBER = 2.0 * math.pi / _WAVELENGTH_M
+_TORCH_GRID_CACHE: Dict[Tuple[str, str], Dict[str, object]] = {}
 
 
 @dataclass
@@ -162,12 +163,28 @@ class Try80PriorComputer:
         try78_los_calibration_json: Path,
         try78_nlos_calibration_json: Path,
         try79_calibration_json: Path,
+        *,
+        backend: str = "numpy",
+        torch_device: Optional[object] = None,
     ) -> None:
         self._path_los_cal = _load_try78_los_calibration(try78_los_calibration_json)
         self._path_nlos_cal = _load_old_calibration(try78_nlos_calibration_json)
         self._spread_cal = _load_spread_calibration(try79_calibration_json)
+        self.backend = backend
+        self.torch_device = torch_device
+        self._torch_coef_cache: Dict[Tuple[str, str, str], Dict[str, object]] = {}
 
     def compute(self, topology: np.ndarray, los_mask: np.ndarray, h_tx: float) -> JointPriors:
+        resolved_backend = self.backend.lower().strip()
+        if resolved_backend == "auto":
+            resolved_backend = "torch" if self.torch_device is not None or _torch_cuda_available() else "numpy"
+        if resolved_backend in {"torch", "cuda", "directml", "cpu", "torch-cpu", "torch_cpu"}:
+            return self._compute_torch(topology, los_mask, h_tx)
+        if resolved_backend != "numpy":
+            raise ValueError("prior backend must be 'numpy', 'torch', 'cuda', 'directml', 'torch-cpu', or 'auto'")
+        return self._compute_numpy(topology, los_mask, h_tx)
+
+    def _compute_numpy(self, topology: np.ndarray, los_mask: np.ndarray, h_tx: float) -> JointPriors:
         topology = np.asarray(topology, dtype=np.float32)
         los_mask = np.asarray(los_mask, dtype=np.float32)
         ct6 = classify_topology(topology)
@@ -206,6 +223,91 @@ class Try80PriorComputer:
             topology_class_3=ct3,
             antenna_bin=ant,
         )
+
+    def _compute_torch(self, topology: np.ndarray, los_mask: np.ndarray, h_tx: float) -> JointPriors:
+        import torch
+
+        device = self._resolve_torch_device()
+        dtype = torch.float32
+        topology_np = np.asarray(topology, dtype=np.float32)
+        los_np = np.asarray(los_mask, dtype=np.float32)
+        topology_t = torch.as_tensor(topology_np, device=device, dtype=dtype)
+        los_t = torch.as_tensor(los_np, device=device, dtype=dtype)
+        maps = _torch_maps(device, dtype)
+        ct6 = classify_topology(topology_np)
+        ct3 = macro_topology_class(ct6)
+        ant = ant_bin(h_tx)
+
+        shared = _compute_shared_features_torch(topology_t, los_t, h_tx, maps)
+        los_prior = _predict_two_ray_map_torch(h_tx, self._path_los_cal, maps)
+        nlos_prior = _compute_try78_nlos_map_torch(
+            topology_t,
+            los_t,
+            h_tx,
+            _sample_city_type_78(topology_np),
+            ant,
+            self._tensor_coefs("try78", self._path_nlos_cal, device, dtype),
+            shared,
+            maps,
+        )
+        path_prior = torch.where(los_t > 0.5, los_prior, nlos_prior).to(dtype)
+        delay_prior = _compute_try79_metric_prior_torch(
+            metric="delay_spread",
+            topology_class=ct6,
+            ant_label=ant,
+            los_mask=los_t,
+            shared=shared,
+            coefs=self._tensor_coefs("try79", self._spread_cal, device, dtype),
+        )
+        angular_prior = _compute_try79_metric_prior_torch(
+            metric="angular_spread",
+            topology_class=ct6,
+            ant_label=ant,
+            los_mask=los_t,
+            shared=shared,
+            coefs=self._tensor_coefs("try79", self._spread_cal, device, dtype),
+        )
+
+        def to_numpy(value: object) -> np.ndarray:
+            return value.detach().cpu().numpy().astype(np.float32)
+
+        return JointPriors(
+            path_loss_prior=to_numpy(path_prior),
+            path_loss_los_prior=to_numpy(los_prior),
+            path_loss_nlos_prior=to_numpy(nlos_prior),
+            delay_spread_prior=to_numpy(delay_prior),
+            angular_spread_prior=to_numpy(angular_prior),
+            topology_class_6=ct6,
+            topology_class_3=ct3,
+            antenna_bin=ant,
+        )
+
+    def _tensor_coefs(self, name: str, coefs: Dict[str, np.ndarray], device: object, dtype: object) -> Dict[str, object]:
+        cache_key = (name, str(device), str(dtype))
+        cached = self._torch_coef_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        import torch
+
+        tensors = {key: torch.as_tensor(value, device=device, dtype=dtype) for key, value in coefs.items()}
+        self._torch_coef_cache[cache_key] = tensors
+        return tensors
+
+    def _resolve_torch_device(self) -> object:
+        import torch
+
+        if self.torch_device is not None:
+            return self.torch_device
+        backend = self.backend.lower().strip()
+        if backend == "directml":
+            import torch_directml
+
+            return torch_directml.device()
+        if backend in {"cpu", "torch-cpu", "torch_cpu"}:
+            return torch.device("cpu")
+        if backend == "cuda":
+            return torch.device("cuda")
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def classify_topology(topo_m: np.ndarray) -> str:
@@ -636,3 +738,309 @@ def _compute_try79_metric_prior(
     raw_prior = _compute_raw_prior_79(metric, topology_class, shared, los_mask)
     x_all = _build_design_matrix_79(shared, raw_prior)
     return _apply_calibration_79(metric, topology_class, ant_label, los_mask, raw_prior, x_all, coefs)
+
+
+def _torch_cuda_available() -> bool:
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+def _torch_maps(device: object, dtype: object) -> Dict[str, object]:
+    key = (str(device), str(dtype))
+    cached = _TORCH_GRID_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    import torch
+
+    d2d = torch.as_tensor(_D2D, device=device, dtype=dtype)
+    maps = {
+        "d2d": d2d,
+        "logd": torch.as_tensor(_LOGD, device=device, dtype=dtype),
+        "radius_px": torch.as_tensor(_RADIUS_PX.astype(np.int64), device=device, dtype=torch.long),
+    }
+    _TORCH_GRID_CACHE[key] = maps
+    return maps
+
+
+def _box_mean_torch(arr: object, k: int) -> object:
+    if k <= 1:
+        return arr.clone()
+    import torch.nn.functional as F
+
+    pad = k // 2
+    x = arr.unsqueeze(0).unsqueeze(0)
+    x = F.pad(x, (pad, pad, pad, pad), mode="reflect")
+    return F.avg_pool2d(x, kernel_size=k, stride=1)[0, 0]
+
+
+def _compute_shared_features_torch(topology: object, los_mask: object, h_tx: float, maps: Dict[str, object]) -> Dict[str, object]:
+    import torch
+
+    d2d = maps["d2d"]
+    logd = maps["logd"]
+    ground = (topology == 0.0).to(torch.float32)
+    buildings = 1.0 - ground
+    nlos_ground = ((los_mask <= 0.5) & (ground > 0.5)).to(torch.float32)
+
+    theta_deg = torch.atan2(torch.tensor(max(float(h_tx) - RX_HEIGHT_M, 0.1), device=topology.device, dtype=topology.dtype), torch.clamp(d2d, min=1.0)) * (180.0 / math.pi)
+    theta_norm = torch.clamp(theta_deg / 90.0, 0.0, 1.0)
+    h_norm_scalar = float(np.clip(np.log1p(max(float(h_tx) - RX_HEIGHT_M, 0.0)) / math.log1p(400.0), 0.0, 1.0))
+    h_norm = torch.full_like(logd, h_norm_scalar)
+
+    density_15 = _box_mean_torch(buildings, KERNEL_SIZES[0])
+    density_41 = _box_mean_torch(buildings, KERNEL_SIZES[1])
+    height_15 = torch.clamp(_box_mean_torch(buildings * topology, KERNEL_SIZES[0]) / HEIGHT_NORM_M, min=0.0)
+    height_41 = torch.clamp(_box_mean_torch(buildings * topology, KERNEL_SIZES[1]) / HEIGHT_NORM_M, min=0.0)
+    nlos_15 = torch.clamp(_box_mean_torch(nlos_ground, KERNEL_SIZES[0]), 0.0, 1.0)
+    nlos_41 = torch.clamp(_box_mean_torch(nlos_ground, KERNEL_SIZES[1]), 0.0, 1.0)
+    blocker_41 = torch.clamp(_box_mean_torch(torch.clamp(topology - RX_HEIGHT_M, min=0.0) * buildings, KERNEL_SIZES[1]) / HEIGHT_NORM_M, min=0.0)
+    clearance = torch.clamp(float(h_tx) - topology, min=0.0) * buildings
+    tx_clearance_41 = torch.clamp(_box_mean_torch(clearance, KERNEL_SIZES[1]) / HEIGHT_NORM_M, min=0.0)
+    taller = (topology > float(h_tx)).to(torch.float32) * buildings
+    tx_below_frac_41 = torch.clamp(_box_mean_torch(taller, KERNEL_SIZES[1]), 0.0, 1.0)
+
+    return {
+        "theta_norm": theta_norm,
+        "theta_inv": 1.0 - theta_norm,
+        "h_norm": h_norm,
+        "logd": logd,
+        "density_15": density_15,
+        "density_41": density_41,
+        "height_15": height_15,
+        "height_41": height_41,
+        "nlos_15": nlos_15,
+        "nlos_41": nlos_41,
+        "blocker_41": blocker_41,
+        "tx_clearance_41": tx_clearance_41,
+        "tx_below_frac_41": tx_below_frac_41,
+    }
+
+
+def _predict_two_ray_map_torch(h_tx_m: float, calibration: Dict[str, np.ndarray], maps: Dict[str, object]) -> object:
+    import torch
+
+    d2d = maps["d2d"]
+    rho = _interpolate_scalar(h_tx_m, calibration["height_bins_m"], calibration["rho"])
+    phi = _interpolate_scalar(h_tx_m, calibration["height_bins_m"], calibration["phi_rad"])
+    bias = _interpolate_scalar(h_tx_m, calibration["height_bins_m"], calibration["bias_db"])
+    d_los = torch.sqrt(d2d * d2d + float(float(h_tx_m) - RX_HEIGHT_M) ** 2)
+    d_ref = torch.sqrt(d2d * d2d + float(float(h_tx_m) + RX_HEIGHT_M) ** 2)
+    d_km = torch.clamp(d_los, min=1.0) / 1000.0
+    fspl = 32.45 + 20.0 * torch.log10(d_km) + 20.0 * math.log10(FREQ_GHZ * 1000.0)
+    ratio = torch.clamp(d_los / torch.clamp(d_ref, min=1.0e-6), 0.0, 2.0)
+    phase = _WAVENUMBER * (d_ref - d_los) + float(phi)
+    real = 1.0 + float(rho) * ratio * torch.cos(phase)
+    imag = -float(rho) * ratio * torch.sin(phase)
+    amp = torch.sqrt(real * real + imag * imag)
+    two_ray = -20.0 * torch.log10(torch.clamp(amp, min=1.0e-6))
+    pred = fspl + two_ray + float(bias)
+    residual_profile = _interpolate_profiles(
+        h_tx_m=h_tx_m,
+        height_bins_m=calibration["height_bins_m"],
+        radial_profile_db=calibration.get("residual_profile_smooth_db", calibration["residual_profile_db"]),
+        radial_count=calibration["residual_count"],
+        global_profile_db=calibration["global_residual_db"],
+    )
+    residual = torch.as_tensor(residual_profile, device=d2d.device, dtype=d2d.dtype)[maps["radius_px"]]
+    pred = pred + torch.clamp(residual, -float(calibration["residual_clip_db"]), float(calibration["residual_clip_db"]))
+    return torch.clamp(pred, PATH_LOSS_MIN_DB, PATH_LOSS_MAX_DB).to(torch.float32)
+
+
+def _compute_formula_prior_78_torch(los_mask: object, h_tx: float, maps: Dict[str, object]) -> object:
+    import torch
+
+    h_tx_c = max(float(h_tx), 1.0)
+    h_rx_c = max(float(RX_HEIGHT_M), 0.5)
+    d2d_raw = maps["d2d"]
+    d3d = torch.sqrt(d2d_raw * d2d_raw + (h_tx_c - h_rx_c) ** 2)
+    d2d = torch.clamp(d2d_raw, min=1.0)
+    d3d = torch.clamp(d3d, min=1.0)
+
+    freq_mhz = FREQ_GHZ * 1000.0
+    log_f = math.log10(freq_mhz)
+    fspl = 32.45 + 20.0 * torch.log10(d3d / 1000.0) + 20.0 * math.log10(freq_mhz)
+    a_hm = (1.1 * log_f - 0.7) * h_rx_c - (1.56 * log_f - 0.8)
+    d_km = torch.clamp(d2d / 1000.0, min=0.001)
+    hb_log = math.log10(max(h_tx_c, 1.0))
+    cost231 = 46.3 + 33.9 * log_f - 13.82 * hb_log - a_hm + (44.9 - 6.55 * hb_log) * torch.log10(d_km) + 3.0
+
+    crossover = max(4.0 * math.pi * h_tx_c * h_rx_c / _WAVELENGTH_M, 1.0)
+    two_ray = 40.0 * torch.log10(d3d) - 20.0 * math.log10(h_tx_c) - 20.0 * math.log10(h_rx_c)
+    los_path = torch.where(d3d <= crossover, fspl, two_ray)
+    theta_deg = torch.atan2(torch.tensor(h_tx_c - h_rx_c, device=d2d.device, dtype=d2d.dtype), torch.clamp(d2d, min=1.0)) * (180.0 / math.pi)
+    sin_theta = torch.clamp(torch.sin(theta_deg * (math.pi / 180.0)), min=1.0e-4, max=1.0)
+    lambda0_db = 20.0 * math.log10((4.0 * math.pi * h_tx_c * FREQ_GHZ * 1e9) / 299792458.0)
+    a2g_los = lambda0_db + A2G_LOS_BIAS + A2G_LOS_LOG_COEFF * torch.log10(sin_theta)
+    a2g_nlos = lambda0_db + (A2G_NLOS_BIAS + A2G_NLOS_AMP * torch.exp(-(90.0 - theta_deg) / A2G_NLOS_TAU))
+    nlos_path = torch.maximum(cost231, a2g_nlos)
+
+    los_prob = los_mask.to(torch.float32)
+    los_blend = 0.7 * los_path + 0.3 * torch.minimum(los_path, a2g_los)
+    prior = los_prob * los_blend + (1.0 - los_prob) * nlos_path
+    return torch.clamp(prior, 0.0, 180.0).to(torch.float32)
+
+
+def _compute_pixel_features_78_torch(topology: object, los_mask: object, prior_db: object, h_tx: float, shared: Dict[str, object], maps: Dict[str, object]) -> object:
+    import torch
+
+    theta_deg = torch.atan2(torch.tensor(max(float(h_tx), 1.0) - RX_HEIGHT_M, device=topology.device, dtype=topology.dtype), torch.clamp(maps["d2d"], min=1.0)) * (180.0 / math.pi)
+    los_prob = los_mask.to(torch.float32)
+    sigma_los = SIGMA_LOS_RHO * torch.pow(torch.clamp(90.0 - theta_deg, min=0.0), SIGMA_LOS_MU)
+    sigma_nlos = SIGMA_NLOS_RHO * torch.pow(torch.clamp(90.0 - theta_deg, min=0.0), SIGMA_NLOS_MU)
+    shadow_sigma = los_prob * sigma_los + (1.0 - los_prob) * sigma_nlos
+    theta_norm = torch.clamp(theta_deg / 90.0, 0.0, 1.0)
+    bias = torch.ones_like(prior_db)
+    logd = maps["logd"]
+    nlos_41 = shared["nlos_41"]
+    density_41 = shared["density_41"]
+    return torch.stack(
+        [
+            prior_db * prior_db,
+            prior_db,
+            logd,
+            shared["density_15"],
+            density_41,
+            shared["height_15"],
+            shared["height_41"],
+            density_41 * logd,
+            shared["nlos_15"],
+            nlos_41,
+            nlos_41 * logd,
+            shadow_sigma,
+            theta_norm,
+            nlos_41 * theta_norm,
+            bias,
+        ],
+        dim=-1,
+    ).to(torch.float32)
+
+
+def _apply_calibration_78_torch(prior: object, x_all: object, los_mask: object, ct: str, ab: str, coefs: Dict[str, object]) -> object:
+    import torch
+
+    out = prior.clone()
+    x_flat = x_all.reshape(-1, PATH_N_FEAT)
+    for los_label, los_flag in (("LoS", True), ("NLoS", False)):
+        region = (los_mask > 0.5) if los_flag else (los_mask <= 0.5)
+        if not bool(torch.any(region).detach().cpu()):
+            continue
+        for ab_try in (ab, "mid_ant", "low_ant", "high_ant"):
+            key = _regime_key_78(ct, los_label, ab_try)
+            if key in coefs:
+                pred = torch.matmul(x_flat, coefs[key]).reshape(prior.shape).to(torch.float32)
+                out = torch.where(region, torch.clamp(pred, PATH_LOSS_MIN_DB, PATH_LOSS_MAX_DB), out)
+                break
+    return out.to(torch.float32)
+
+
+def _compute_try78_nlos_map_torch(
+    topology: object,
+    los_mask: object,
+    h_tx: float,
+    city_type: str,
+    ant_label: str,
+    coefs: Dict[str, object],
+    shared: Dict[str, object],
+    maps: Dict[str, object],
+) -> object:
+    prior = _compute_formula_prior_78_torch(los_mask, h_tx, maps)
+    x_all = _compute_pixel_features_78_torch(topology, los_mask, prior, h_tx, shared, maps)
+    return _apply_calibration_78_torch(prior, x_all, los_mask, city_type, ant_label, coefs)
+
+
+def _build_design_matrix_79_torch(shared: Dict[str, object], raw_prior: object) -> object:
+    import torch
+
+    prior_log = torch.log1p(torch.clamp(raw_prior, min=0.0))
+    tx_clearance = shared["tx_clearance_41"]
+    tx_below = shared["tx_below_frac_41"]
+    bias = torch.ones_like(raw_prior)
+    return torch.stack(
+        [
+            prior_log * prior_log,
+            prior_log,
+            shared["logd"],
+            shared["theta_norm"],
+            shared["theta_inv"],
+            shared["h_norm"],
+            shared["h_norm"] * shared["h_norm"],
+            shared["density_15"],
+            shared["density_41"],
+            shared["height_15"],
+            shared["height_41"],
+            shared["nlos_15"],
+            shared["nlos_41"],
+            shared["nlos_41"] * shared["logd"],
+            shared["density_41"] * shared["theta_inv"],
+            shared["blocker_41"],
+            bias,
+            tx_clearance,
+            tx_below,
+            shared["theta_norm"] * shared["density_41"],
+            tx_clearance * shared["theta_inv"],
+            tx_below * shared["density_41"],
+            tx_below * shared["nlos_41"],
+        ],
+        dim=-1,
+    ).to(torch.float32)
+
+
+def _compute_raw_prior_79_torch(metric: str, topology_class: str, shared: Dict[str, object], los_mask: object) -> object:
+    import torch
+
+    spec = METRIC_SPECS[metric]
+    topo_bias = TOPOLOGY_PRIOR_BIAS_LOG[metric][topology_class]
+    base_los = math.log1p(float(spec["base_los"]))
+    base_nlos = math.log1p(float(spec["base_nlos"]))
+    base = torch.where(los_mask > 0.5, torch.tensor(base_los, device=los_mask.device, dtype=torch.float32), torch.tensor(base_nlos, device=los_mask.device, dtype=torch.float32))
+    prior_log = (
+        base
+        + topo_bias
+        + float(spec["coef_logd"]) * shared["logd"]
+        + float(spec["coef_theta_inv"]) * shared["theta_inv"]
+        + float(spec["coef_density"]) * shared["density_41"]
+        + float(spec["coef_height"]) * shared["height_41"]
+        + float(spec["coef_nlos"]) * shared["nlos_41"]
+        + float(spec["coef_interaction"]) * shared["nlos_41"] * shared["theta_inv"]
+    )
+    prior = torch.expm1(torch.clamp(prior_log, 0.0, 8.0))
+    return torch.clamp(prior, 0.0, float(spec["clip_hi"])).to(torch.float32)
+
+
+def _apply_calibration_79_torch(metric: str, topology_class: str, ant_label: str, los_mask: object, raw_prior: object, x_all: object, coefs: Dict[str, object]) -> object:
+    import torch
+
+    pred_log = torch.log1p(torch.clamp(raw_prior, min=0.0)).to(torch.float32)
+    x_flat = x_all.reshape(-1, x_all.shape[-1])
+    los_region = los_mask > 0.5
+    nlos_region = los_mask <= 0.5
+    for los_label, region in (("LoS", los_region), ("NLoS", nlos_region)):
+        if not bool(torch.any(region).detach().cpu()):
+            continue
+        for key in _inference_keys_79(metric, topology_class, los_label, ant_label):
+            if key in coefs:
+                reg_pred = torch.matmul(x_flat, coefs[key]).reshape(raw_prior.shape).to(torch.float32)
+                pred_log = torch.where(region, reg_pred, pred_log)
+                break
+    pred = torch.expm1(pred_log).to(torch.float32)
+    pred = torch.where(los_region, torch.clamp(pred, 0.0, LOS_CLIP_HI[metric]), pred)
+    pred = torch.where(nlos_region, torch.clamp(pred, 0.0, NLOS_CLIP_HI[metric]), pred)
+    return torch.clamp(pred, 0.0, max(LOS_CLIP_HI[metric], NLOS_CLIP_HI[metric])).to(torch.float32)
+
+
+def _compute_try79_metric_prior_torch(
+    metric: str,
+    topology_class: str,
+    ant_label: str,
+    los_mask: object,
+    shared: Dict[str, object],
+    coefs: Dict[str, object],
+) -> object:
+    raw_prior = _compute_raw_prior_79_torch(metric, topology_class, shared, los_mask)
+    x_all = _build_design_matrix_79_torch(shared, raw_prior)
+    return _apply_calibration_79_torch(metric, topology_class, ant_label, los_mask, raw_prior, x_all, coefs)

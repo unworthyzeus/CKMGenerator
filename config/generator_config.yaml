@@ -22,6 +22,7 @@ priors:
   try78_los_calibration_json: calibrations/try78_los_two_ray_calibration.json
   try78_nlos_calibration_json: calibrations/try78_nlos_regime_calibration.json
   try79_calibration_json: calibrations/try79_calibration.json
+  backend: auto
 
 io:
   image_size: 513

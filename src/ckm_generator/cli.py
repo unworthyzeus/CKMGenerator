@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=Path, default=None)
     parser.add_argument("--device", choices=("auto", "cpu", "cuda", "directml"), default="auto")
     parser.add_argument("--mask-source", choices=("auto", "generated", "provided"), default="auto")
+    parser.add_argument("--prior-backend", choices=("auto", "numpy", "torch", "cuda", "directml", "torch-cpu"), default=None, help="Prior computation backend. Defaults to config.")
     parser.add_argument("--skip-model", action="store_true", help="Only generate masks and priors.")
     parser.add_argument("--check-runtime", action="store_true", help="Print PyTorch/DirectML/CUDA diagnostics and exit.")
     parser.add_argument("--batch-size", type=int, default=None, help="Model inference batch size. Defaults to the runtime recommendation.")
@@ -81,6 +82,8 @@ def main() -> None:
 
     try:
         generator = CKMGenerator(checkpoint_path=args.checkpoint, device=args.device, load_model=not args.skip_model)
+        if args.prior_backend is not None:
+            generator.config.setdefault("priors", {})["backend"] = args.prior_backend
     except RuntimeDependencyError as exc:
         raise SystemExit(f"Runtime error: {exc}") from exc
     out_dir = resolve_output_dir(args.out, label=args.run_name)

@@ -45,6 +45,12 @@ def main() -> None:
                 "provided: require masks from the input/upload. generated: always ray-cast from topology + antenna height."
             ),
         )
+        prior_backend = st.selectbox(
+            "Prior backend",
+            ["auto", "numpy", "torch", "cuda", "directml", "torch-cpu"],
+            index=0,
+            help="auto uses the selected torch runtime when available; numpy is the exact CPU fallback.",
+        )
         run_model = st.checkbox("Run Try 80 model", value=True)
         model_batch_size = st.number_input(
             "Model batch size",
@@ -135,6 +141,7 @@ def main() -> None:
 
     try:
         generator = CKMGenerator(device=device, load_model=run_model)
+        generator.config.setdefault("priors", {})["backend"] = prior_backend
         out_dir = _selected_output_dir(
             output_mode,
             run_name=run_name,
