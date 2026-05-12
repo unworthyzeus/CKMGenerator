@@ -167,6 +167,9 @@ class CKMGenerator:
         def get_raycast_los() -> np.ndarray:
             nonlocal raycast_los
             if raycast_los is None:
+                los_backend = str(los_cfg.get("backend", "numpy")).lower()
+                if los_backend == "auto":
+                    los_backend = "torch" if self._uses_cuda() else "numpy"
                 raycast_los = compute_los_mask(
                     topology,
                     h_m,
@@ -175,6 +178,8 @@ class CKMGenerator:
                     clearance_m=float(los_clearance_m if los_clearance_m is not None else los_cfg.get("clearance_m", 0.0)),
                     building_dilation_px=int(los_building_dilation_px if los_building_dilation_px is not None else los_cfg.get("building_dilation_px", 0)),
                     chunk_size=int(los_cfg.get("chunk_size", 4096)),
+                    backend=los_backend,
+                    torch_device=str(self.device) if los_backend == "torch" and self.device is not None else None,
                 )
             return raycast_los
 

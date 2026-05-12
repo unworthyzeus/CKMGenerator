@@ -114,6 +114,11 @@ from topology + antenna height using the ray-caster.
 The geometry ray-caster is useful for topology-only inputs, but it is not
 bit-perfect against CKM. On the first two CKM samples tested with the strict
 ray-caster (`sample_step_px=0.25`), mismatch was about `3.68%` and `2.07%`.
+When masks must be generated from geometry, `los.backend: auto` uses the
+PyTorch/CUDA vectorized backend on CUDA devices and falls back to NumPy
+otherwise. The CUDA backend produces zero difference with the original
+GT ray-caster for the validated Barcelona and exported CKM samples; it only
+changes runtime.
 
 Use modes explicitly when needed:
 
@@ -612,6 +617,7 @@ The main performance controls are:
 - `Device`: CUDA is preferred when available; CPU works but is slower.
 - `Model batch size`: can improve throughput on GPUs with enough VRAM.
 - `CUDA mixed precision`: uses PyTorch CUDA autocast and was measured on 10 exported samples as about `1.25x` faster on the local RTX 3050 Ti Laptop GPU, with RMSE differences versus fp32 of `0.0016 dB`, `0.0034 ns`, and `0.0030 deg`.
+- `LoS backend`: `auto` uses the CUDA vectorized ray-caster when the generator is running on CUDA, while preserving the original GT ray-caster mask exactly on validated samples.
 - `Save visual map PNGs`: disabling this speeds up batch exports by avoiding Matplotlib rendering. Numeric arrays and metadata can still be saved.
 - `Run Try 80 model`: disabling this is useful when only masks, priors, and input validation are needed.
 

@@ -34,6 +34,7 @@ los:
   sample_step_px: 0.25
   clearance_m: 0.0
   building_dilation_px: 0
+  backend: auto
   chunk_size: 4096
 
 runtime:

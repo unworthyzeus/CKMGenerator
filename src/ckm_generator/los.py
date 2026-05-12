@@ -35,6 +35,8 @@ def compute_los_mask(
     clearance_m: float = 0.0,
     building_dilation_px: int = 0,
     chunk_size: int = 4096,
+    backend: str = "numpy",
+    torch_device: Optional[str] = None,
 ) -> np.ndarray:
     """Generate a binary LoS mask by ray-casting from the center transmitter.
 
@@ -42,6 +44,52 @@ def compute_los_mask(
     center-to-pixel ray rises above the straight Tx-to-Rx segment. Building
     pixels are always returned as non-LoS, matching the Try 80 masking rule.
     """
+    resolved_backend = backend.lower().strip()
+    if resolved_backend in {"auto", "cuda"}:
+        resolved_backend = "torch" if _torch_cuda_available() else "numpy"
+    if resolved_backend == "torch":
+        return _compute_los_mask_torch(
+            topology,
+            antenna_height_m,
+            rx_height_m=rx_height_m,
+            tx_row=tx_row,
+            tx_col=tx_col,
+            ground_epsilon_m=ground_epsilon_m,
+            sample_step_px=sample_step_px,
+            clearance_m=clearance_m,
+            building_dilation_px=building_dilation_px,
+            chunk_size=chunk_size,
+            torch_device=torch_device,
+        )
+    if resolved_backend != "numpy":
+        raise ValueError("backend must be 'numpy', 'torch', 'cuda', or 'auto'")
+    return _compute_los_mask_numpy(
+        topology,
+        antenna_height_m,
+        rx_height_m=rx_height_m,
+        tx_row=tx_row,
+        tx_col=tx_col,
+        ground_epsilon_m=ground_epsilon_m,
+        sample_step_px=sample_step_px,
+        clearance_m=clearance_m,
+        building_dilation_px=building_dilation_px,
+        chunk_size=chunk_size,
+    )
+
+
+def _compute_los_mask_numpy(
+    topology: np.ndarray,
+    antenna_height_m: float,
+    *,
+    rx_height_m: float,
+    tx_row: Optional[int],
+    tx_col: Optional[int],
+    ground_epsilon_m: float,
+    sample_step_px: float,
+    clearance_m: float,
+    building_dilation_px: int,
+    chunk_size: int,
+) -> np.ndarray:
     topo = np.nan_to_num(np.asarray(topology, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
     if topo.ndim != 2:
         raise ValueError(f"Expected a 2D topology map, got shape {topo.shape}")
@@ -95,6 +143,101 @@ def compute_los_mask(
         sampled_heights = blockers[sample_r, sample_c]
         blocked = active & not_target & not_tx & ((sampled_heights + float(clearance_m)) >= z_line)
         los_values[start:end] = ~np.any(blocked, axis=0)
+
+    los = np.zeros_like(ground, dtype=np.float32)
+    los[rows, cols] = los_values.astype(np.float32)
+    return los * ground.astype(np.float32)
+
+
+def _torch_cuda_available() -> bool:
+    try:
+        import torch
+
+        return bool(torch.cuda.is_available())
+    except Exception:
+        return False
+
+
+def _compute_los_mask_torch(
+    topology: np.ndarray,
+    antenna_height_m: float,
+    *,
+    rx_height_m: float,
+    tx_row: Optional[int],
+    tx_col: Optional[int],
+    ground_epsilon_m: float,
+    sample_step_px: float,
+    clearance_m: float,
+    building_dilation_px: int,
+    chunk_size: int,
+    torch_device: Optional[str],
+) -> np.ndarray:
+    try:
+        import torch
+    except Exception as exc:  # pragma: no cover - optional backend guard
+        raise RuntimeError("The torch LoS backend requires PyTorch") from exc
+
+    device = torch.device(torch_device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    topo = np.nan_to_num(np.asarray(topology, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+    if topo.ndim != 2:
+        raise ValueError(f"Expected a 2D topology map, got shape {topo.shape}")
+    h, w = topo.shape
+    tx_r = h // 2 if tx_row is None else int(tx_row)
+    tx_c = w // 2 if tx_col is None else int(tx_col)
+    ground = topo <= float(ground_epsilon_m)
+
+    blockers_np = topo
+    if building_dilation_px > 0:
+        if maximum_filter is None:
+            raise RuntimeError("scipy is required for building_dilation_px > 0")
+        size = int(building_dilation_px) * 2 + 1
+        blockers_np = maximum_filter(topo, size=size, mode="nearest")
+
+    rows, cols = np.nonzero(ground)
+    los_values = np.zeros(rows.shape[0], dtype=bool)
+    step_px = max(float(sample_step_px), 0.25)
+    chunk = max(int(chunk_size), 256)
+    blockers = torch.as_tensor(blockers_np, device=device, dtype=torch.float64)
+    step_axis_cache: dict[int, object] = {}
+
+    with torch.inference_mode():
+        for start in range(0, rows.shape[0], chunk):
+            end = min(start + chunk, rows.shape[0])
+            rr_np = rows[start:end].astype(np.float32)
+            cc_np = cols[start:end].astype(np.float32)
+            dr_np = rr_np - float(tx_r)
+            dc_np = cc_np - float(tx_c)
+            steps_np = np.ceil(np.maximum(np.abs(dr_np), np.abs(dc_np)) / step_px).astype(np.int32)
+            steps_np = np.maximum(steps_np, 1)
+            max_steps = int(steps_np.max(initial=1))
+            if max_steps <= 1:
+                los_values[start:end] = True
+                continue
+
+            step_ids = step_axis_cache.get(max_steps)
+            if step_ids is None:
+                step_ids = torch.arange(1, max_steps, device=device, dtype=torch.float64)[:, None]
+                step_axis_cache[max_steps] = step_ids
+
+            steps = torch.as_tensor(steps_np, device=device, dtype=torch.float64)[None, :]
+            rr = torch.as_tensor(rr_np, device=device, dtype=torch.float64)
+            cc = torch.as_tensor(cc_np, device=device, dtype=torch.float64)
+            dr = torch.as_tensor(dr_np, device=device, dtype=torch.float64)
+            dc = torch.as_tensor(dc_np, device=device, dtype=torch.float64)
+
+            active = step_ids < steps
+            t = step_ids / steps
+            sample_r = torch.round(float(tx_r) + dr[None, :] * t).to(torch.int64).clamp_(0, h - 1)
+            sample_c = torch.round(float(tx_c) + dc[None, :] * t).to(torch.int64).clamp_(0, w - 1)
+
+            target_r = rr.to(torch.int64)[None, :]
+            target_c = cc.to(torch.int64)[None, :]
+            not_target = (sample_r != target_r) | (sample_c != target_c)
+            not_tx = (sample_r != tx_r) | (sample_c != tx_c)
+            z_line = float(antenna_height_m) + (float(rx_height_m) - float(antenna_height_m)) * t
+            sampled_heights = blockers[sample_r, sample_c]
+            blocked = active & not_target & not_tx & ((sampled_heights + float(clearance_m)) >= z_line)
+            los_values[start:end] = (~torch.any(blocked, dim=0)).detach().cpu().numpy()
 
     los = np.zeros_like(ground, dtype=np.float32)
     los[rows, cols] = los_values.astype(np.float32)
