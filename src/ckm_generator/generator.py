@@ -94,7 +94,7 @@ class CKMGenerator:
             model_cfg = Try80ModelConfig(**model_cfg_raw)
             model = Try80Model(model_cfg)
         except Exception as exc:
-            raise RuntimeDependencyError(f"Could not build Try 80 model from config: {type(exc).__name__}: {exc}") from exc
+            raise RuntimeDependencyError(f"Could not build final residual model from config: {type(exc).__name__}: {exc}") from exc
         state_dict = state.get("model", state) if isinstance(state, dict) else state
         try:
             model.load_state_dict(state_dict, strict=False)
@@ -108,7 +108,7 @@ class CKMGenerator:
                 except Exception:
                     pass
         except Exception as exc:
-            raise RuntimeDependencyError(f"Could not move/load Try 80 model on {report.selected_device}: {type(exc).__name__}: {exc}") from exc
+            raise RuntimeDependencyError(f"Could not move/load final residual model on {report.selected_device}: {type(exc).__name__}: {exc}") from exc
         model.eval()
         self.model = model
         self._configure_prior_backend()

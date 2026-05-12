@@ -12,7 +12,7 @@ from .output_utils import resolve_output_dir
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate CKM LoS/NLoS masks, priors, and Try 80 predictions.")
+    parser = argparse.ArgumentParser(description="Generate CKM LoS/NLoS masks, final calibrated priors, and residual GMM-head predictions.")
     parser.add_argument("--input", type=Path, default=None, help="Topology image/array or HDF5 file.")
     parser.add_argument("--height", type=float, default=None, help="Antenna height in metres. Used when the input does not provide one.")
     parser.add_argument("--out", type=Path, default=None, help="Output directory. Defaults to outputs/runs/<timestamp>_cli.")

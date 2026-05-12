@@ -35,7 +35,7 @@ def main() -> None:
         device = st.selectbox("Device", ["auto", "directml", "cpu", "cuda"], index=0)
         runtime_report = inspect_runtime(device)
         st.caption(f"Runtime: torch={runtime_report.torch_version or 'missing'} | selected={runtime_report.selected_device}")
-        st.caption("Rx height is fixed at 1.5 m for the CKM calibration and Try 78/79/80 priors.")
+        st.caption("Rx height is fixed at 1.5 m for the CKM calibration and final calibrated priors.")
         mask_source = st.selectbox(
             "Mask used by priors/model",
             ["auto", "provided", "generated"],
@@ -51,7 +51,7 @@ def main() -> None:
             index=0,
             help="auto uses the selected torch runtime when available; numpy is the exact CPU fallback.",
         )
-        run_model = st.checkbox("Run Try 80 model", value=True)
+        run_model = st.checkbox("Run final residual model", value=True)
         model_batch_size = st.number_input(
             "Model batch size",
             min_value=1,

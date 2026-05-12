@@ -53,10 +53,10 @@ Use `--out C:\path\chosen_folder` to write somewhere specific.
 
 Includes:
 
-- `models/best_model.pt`: current Try 80 checkpoint copied from `try80_joint_huge_pathloss_finetune`, tracked with Git LFS.
-- `calibrations/`: frozen Try 78/79 calibration JSONs used by Try 80.
+- `models/best_model.pt`: final joint prior-anchored residual GMM-head checkpoint copied from `try80_joint_huge_pathloss_finetune`, tracked with Git LFS.
+- `calibrations/`: frozen calibration JSONs for the final ML-calibrated path-loss and spread priors.
 - `src/ckm_generator/`: clean generator interface, CLI, Streamlit app, loaders, LoS/NLoS ray-caster, plotting.
-- `vendor/`: full copied code for Try 80, Try 78, Try 79, and the preliminary final Try 80 bundle.
+- `vendor/`: copied historical training/runtime code for the final priors and residual GMM-head model.
 
 `models/best_model.pt` is stored through Git LFS because the checkpoint is
 larger than GitHub's regular file limit. After cloning, run `git lfs pull` if
@@ -126,8 +126,7 @@ Use modes explicitly when needed:
 - `--mask-source provided`: require a mask in the input/upload; fail if missing.
 - `--mask-source generated`: ignore provided masks and ray-cast from topology + antenna height.
 
-Rx height is fixed to `1.5 m` by the CKM calibration and the Try 78/79/80 prior
-formulas.
+Rx height is fixed to `1.5 m` by the CKM calibration and the final calibrated-prior formulas.
 
 ## CLI
 
@@ -227,12 +226,12 @@ Array keys:
 - `generated_los_mask`: ray-cast/generated LoS mask, or a copy of the provided mask when provided masks are used.
 - `generated_nlos_mask`: NLoS counterpart of `generated_los_mask`.
 - `reference_los_mask`: optional, present only when the input carried/provided a reference LoS mask.
-- `prior_path_loss`, `prior_path_loss_los`, `prior_path_loss_nlos`: Try 78/79/80 path-loss prior maps in dB.
+- `prior_path_loss`, `prior_path_loss_los`, `prior_path_loss_nlos`: final ML-calibrated path-loss prior maps in dB.
 - `prior_delay_spread`: delay-spread prior map in ns.
 - `prior_angular_spread`: angular-spread prior map in degrees.
-- `pred_path_loss`: model path-loss prediction in dB, present when the Try 80 model is run.
-- `pred_delay_spread`: model delay-spread prediction in ns, present when the Try 80 model is run.
-- `pred_angular_spread`: model angular-spread prediction in degrees, present when the Try 80 model is run.
+- `pred_path_loss`: model path-loss prediction in dB, present when the final residual GMM-head model is run.
+- `pred_delay_spread`: model delay-spread prediction in ns, present when the final residual GMM-head model is run.
+- `pred_angular_spread`: model angular-spread prediction in degrees, present when the final residual GMM-head model is run.
 
 The metadata JSON stores run bookkeeping and paths:
 
@@ -274,7 +273,7 @@ Mixed precision vs fp32 prediction differences over valid receiver pixels:
 | Delay spread | `0.0028 ns` | `0.0014 ns` | `0.050 ns` |
 | Angular spread | `0.0025 deg` | `0.0011 deg` | `0.077 deg` |
 
-Those differences are tiny compared with the Try 80 validation RMSE scale in
+Those differences are tiny compared with the final-model validation RMSE scale in
 `best_summary_val.json` (`1.62 dB`, `22.10 ns`, and `11.40 deg`
 respectively), so mixed precision is nearly identical to fp32 for these sampled
 outputs while running faster on this CUDA setup.
@@ -291,7 +290,7 @@ The sidebar has an output selector: create a new timestamped run under
 `outputs/runs`, reuse an existing output folder, or enter a custom path.
 It also has export toggles for numeric arrays (`.npz`), LoS/NLoS mask PNGs,
 and visual prior/prediction PNGs. `Model batch size` controls how many samples
-are sent through the Try 80 model at once; higher values are faster if the GPU
+are sent through the final residual GMM-head model at once; higher values are faster if the GPU
 has enough VRAM. `CUDA mixed precision` is optional and trades tiny numeric
 differences for speed on supported NVIDIA GPUs.
 The upload widget supports multiple topology/data/HDF5 files. Project config
@@ -301,10 +300,10 @@ restart the Streamlit server after changing that value.
 ## TFG Appendix: CKM Generator
 
 The CKM Generator is the standalone inference tool built around the final
-Try 80 model. Its purpose is to take a city topology map, construct the same
+joint prior-anchored residual GMM-head model. Its purpose is to take a city topology map, construct the same
 physical inputs used during CKM training and calibration, generate or reuse
-LoS/NLoS masks, compute the Try 78/79/80 prior maps, and optionally run the
-Try 80 neural model to predict the three radio maps:
+LoS/NLoS masks, compute the final calibrated prior maps, and optionally run the
+residual GMM-head neural model to predict the three radio maps:
 
 - path loss, in dB
 - delay spread, in ns
@@ -406,7 +405,7 @@ Optional antenna height can be read from HDF5/NPZ keys named `uav_height`,
 `antenna_height`, `antenna_height_m`, `height`, `height_m`, or `h_tx`. If no
 height is present, it must be supplied in the interface or with `--height`.
 The valid transmitter height range is `10 m` to `478 m`. Receiver height is
-fixed at `1.5 m`, matching the CKM calibration and Try 78/79/80 prior formulas.
+fixed at `1.5 m`, matching the CKM calibration and final calibrated-prior formulas.
 
 ### Streamlit Controls
 
@@ -417,7 +416,7 @@ The web interface exposes the following controls:
 - `Antenna height (m)`: used when the input does not already store height.
 - `Device`: selects `auto`, `cuda`, `directml`, or `cpu`.
 - `Mask used by priors/model`: selects `auto`, `provided`, or `generated`.
-- `Run Try 80 model`: if disabled, only topology, masks, priors, arrays, and metadata are produced.
+- `Run final residual model`: if disabled, only topology, masks, priors, arrays, and metadata are produced.
 - `Model batch size`: number of prepared samples sent through the model at once.
 - `CUDA mixed precision`: enables CUDA autocast for faster NVIDIA inference with tiny numeric differences.
 - `Save numeric arrays (.npz)`: writes all numeric arrays for later analysis.
@@ -443,11 +442,11 @@ The terminal interface exposes equivalent controls:
 - `--height`: antenna height when it is not stored in the input.
 - `--out`: exact output directory.
 - `--run-name`: suffix for timestamped output directories.
-- `--checkpoint`: alternative Try 80 checkpoint path.
+- `--checkpoint`: alternative compatible final-model checkpoint path.
 - `--device auto|cpu|cuda|directml`: runtime selection.
 - `--mask-source auto|provided|generated`: mask policy.
 - `--prior-backend auto|numpy|torch|cuda|directml|torch-cpu`: prior runtime.
-- `--skip-model`: produce masks and priors but skip Try 80 inference.
+- `--skip-model`: produce masks and priors but skip residual-model inference.
 - `--batch-size`: model batch size.
 - `--mixed-precision`: CUDA autocast inference.
 - `--save-arrays` / `--no-save-arrays`: enable or disable `.npz` output.
@@ -481,7 +480,7 @@ the values are loaded as the topology heights directly.
 
 ### Model Grid, Interpolation, Crop, And Padding
 
-The Try 80 model is calibrated on a fixed `513 x 513` grid at `1 m/pixel`.
+The final residual GMM-head model is calibrated on a fixed `513 x 513` grid at `1 m/pixel`.
 Every input is therefore converted to this representation before priors or model
 inference are computed.
 
@@ -622,12 +621,24 @@ The main performance controls are:
 - `LoS backend`: `auto` uses the CUDA vectorized ray-caster when the generator is running on CUDA, while preserving the original GT ray-caster mask exactly on validated samples.
 - `Prior backend`: `auto` uses the selected torch runtime when available. It can also be forced to `numpy`, `torch`, `cuda`, `directml`, or `torch-cpu`.
 - `Save visual map PNGs`: disabling this speeds up batch exports by avoiding Matplotlib rendering. Numeric arrays and metadata can still be saved.
-- `Run Try 80 model`: disabling this is useful when only masks, priors, and input validation are needed.
+- `Run final residual model`: disabling this is useful when only masks, priors, and input validation are needed.
 
-On the Barcelona runtime benchmark, the prior backend reduced Try 78/79 prior
+On the Barcelona runtime benchmark, the prior backend reduced final calibrated-prior
 evaluation from about `0.41 s/sample` with NumPy to about `0.04 s/sample` with
 torch/CUDA. On all 50 stored Barcelona samples, the resulting model RMSE stayed
-unchanged at thesis scale.
+unchanged at thesis scale. The complete generated-mask path is:
+
+| Component | Backend | Mean time/sample |
+| --- | --- | ---: |
+| Topology preparation | CPU arrays | `0.002 s` |
+| LoS/NLoS mask generation | vectorized torch/CUDA ray-caster | `0.30 s` |
+| Final calibrated priors | torch/CUDA prior backend | `0.04 s` |
+| Residual GMM-head prediction | CUDA mixed fp16 | `0.54 s` |
+| Complete final-generator path | CUDA, batch size 1 | `0.88 s` |
+
+Compared with the MATLAB ray-tracing script on the same Barcelona geometry
+(`99.89 s/sample`), this is `113.7x` faster and exceeds the original `10x` to
+`100x` runtime target.
 
 For large image-only batches, provided masks are faster and more reproducible
 than generated masks. If no masks are provided, the geometric ray-caster must
@@ -636,7 +647,7 @@ compute LoS/NLoS from the topology and antenna height.
 ## Conclusions / Soon-Medium Work
 
 Two practical next steps are worth keeping close to the current generator and
-Try 80 line:
+final residual GMM-head line:
 
 - Train or fine-tune specialist checkpoints for specific urban typologies, such
   as dense high-rise, compact mid-rise, open low-rise, or other topology classes
@@ -691,7 +702,7 @@ expected to match CKM bit-for-bit.
 
 ## Updating the Model Later
 
-Replace `models/best_model.pt` with the newer compatible Try 80 checkpoint. If the architecture changes, update `config/generator_config.yaml` under `model.model_cfg`.
+Replace `models/best_model.pt` with the newer compatible final-model checkpoint. If the architecture changes, update `config/generator_config.yaml` under `model.model_cfg`.
 
 ## Updating the LFS Checkpoint
 
