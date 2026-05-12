@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import traceback
 from pathlib import Path
@@ -11,12 +12,22 @@ from typing import Iterable
 import numpy as np
 import streamlit as st
 
-from .diagnostics import inspect_runtime
-from .generator import CKMGenerator
-from .io_utils import HDF5_SUFFIXES, load_hdf5_samples, load_single_input
-from .output_utils import list_existing_output_dirs, make_timestamped_output_dir, safe_output_name
-from .paths import DEFAULT_OUTPUT_DIR
-from .plotting import TASK_LABELS
+if __package__ in {None, ""}:
+    # Streamlit runs app.py as a script, so relative imports need a package fallback.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from ckm_generator.diagnostics import inspect_runtime
+    from ckm_generator.generator import CKMGenerator
+    from ckm_generator.io_utils import HDF5_SUFFIXES, load_hdf5_samples, load_single_input
+    from ckm_generator.output_utils import list_existing_output_dirs, make_timestamped_output_dir, safe_output_name
+    from ckm_generator.paths import DEFAULT_OUTPUT_DIR
+    from ckm_generator.plotting import TASK_LABELS
+else:
+    from .diagnostics import inspect_runtime
+    from .generator import CKMGenerator
+    from .io_utils import HDF5_SUFFIXES, load_hdf5_samples, load_single_input
+    from .output_utils import list_existing_output_dirs, make_timestamped_output_dir, safe_output_name
+    from .paths import DEFAULT_OUTPUT_DIR
+    from .plotting import TASK_LABELS
 
 
 def main() -> None:
