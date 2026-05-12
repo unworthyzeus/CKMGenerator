@@ -265,8 +265,8 @@ class CKMGenerator:
         out_dir: Path = DEFAULT_OUTPUT_DIR,
         *,
         save_arrays: bool = True,
-        save_masks: bool = True,
-        save_visual_maps: bool = True,
+        save_masks: bool = False,
+        save_visual_maps: bool = False,
         compress_arrays: bool = False,
     ) -> Dict[str, str]:
         out_dir = Path(out_dir)

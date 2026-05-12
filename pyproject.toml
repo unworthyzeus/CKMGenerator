@@ -1,7 +1,7 @@
 [project]
 name = "ckm-generator"
 version = "0.1.0"
-description = "Standalone CKM final generator for LoS/NLoS masks, Try 78/79 priors, and Try 80 predictions."
+description = "Standalone CKM final generator for LoS/NLoS masks, calibrated priors, and residual GMM-head predictions."
 requires-python = ">=3.10"
 dependencies = [
   "numpy",

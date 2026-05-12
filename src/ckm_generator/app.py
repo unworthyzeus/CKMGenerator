@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import json
 from pathlib import Path
 from typing import Iterable
 
@@ -157,6 +158,9 @@ def main() -> None:
         run = st.button("Generate", type="primary")
 
     if not run:
+        cached = st.session_state.get("last_preview_manifest")
+        if cached:
+            _render_preview(cached, cached=True)
         return
 
     paths = _materialize_inputs(input_path, uploaded)
@@ -213,28 +217,181 @@ def main() -> None:
             saved.append((result, files))
             progress.progress((save_offset + idx) / (len(paths) * phase_count), text=f"Saved {idx}/{len(paths)}")
         rendered = saved
+        preview_manifest = _preview_manifest(rendered, out_dir)
+        st.session_state["last_preview_manifest"] = preview_manifest
         progress.empty()
     except Exception as exc:
         _render_error(exc, traceback.format_exc())
         return
 
-    st.success(f"Generated {len(rendered)} sample{'s' if len(rendered) != 1 else ''}")
-    st.caption(f"Output: {out_dir}")
-    if len(rendered) == 1:
-        _render_result(*rendered[0])
-    elif len(rendered) > 6:
-        labels = [f"{idx:03d} | {result.sample_id}" for idx, (result, _) in enumerate(rendered, start=1)]
-        selected = st.selectbox("Sample", labels, index=0)
-        selected_idx = labels.index(selected)
-        _render_result(*rendered[selected_idx])
+    _render_preview(preview_manifest, cached=False, memory_results=rendered)
+
+
+def _render_preview(preview: dict[str, object], *, cached: bool = False, memory_results=None) -> None:
+    items = list(preview.get("items", []))
+    out_dir = preview.get("out_dir")
+    if cached:
+        st.info(f"Showing last generated batch: {len(items)} sample{'s' if len(items) != 1 else ''}")
     else:
-        tabs = st.tabs([result.sample_id for result, _ in rendered])
-        for tab, (result, files) in zip(tabs, rendered):
+        st.success(f"Generated {len(items)} sample{'s' if len(items) != 1 else ''}")
+    if out_dir:
+        st.caption(f"Output: {out_dir}")
+
+    memory_by_label = {}
+    if memory_results:
+        memory_by_label = {_result_label(idx, result): (result, files) for idx, (result, files) in enumerate(memory_results, start=1)}
+
+    if len(items) > 1:
+        st.dataframe(_preview_summary(items), use_container_width=True, hide_index=True)
+    if len(items) == 1:
+        _render_preview_item(items[0], memory_by_label=memory_by_label)
+    elif len(items) > 6:
+        labels = [str(item["label"]) for item in items]
+        current = st.session_state.get("ckm_preview_sample")
+        index = labels.index(current) if current in labels else 0
+        selected = st.selectbox(
+            "Preview sample",
+            labels,
+            index=index,
+            key="ckm_preview_sample",
+            help="All samples were generated and saved; choose any row here to inspect its preview.",
+        )
+        selected_item = items[labels.index(selected)]
+        _render_preview_item(selected_item, memory_by_label=memory_by_label)
+    else:
+        tabs = st.tabs([str(item["label"]) for item in items])
+        for tab, item in zip(tabs, items):
             with tab:
-                _render_result(result, files)
+                _render_preview_item(item, memory_by_label=memory_by_label)
 
     with st.expander("Generated files", expanded=False):
-        st.json({result.sample_id: files for result, files in rendered})
+        st.json({str(item["label"]): item.get("files", {}) for item in items})
+
+
+def _preview_manifest(rendered, out_dir: Path) -> dict[str, object]:
+    return {
+        "out_dir": str(out_dir),
+        "items": [_preview_item(idx, result, files) for idx, (result, files) in enumerate(rendered, start=1)],
+    }
+
+
+def _preview_item(idx: int, result, files: dict[str, str]) -> dict[str, object]:
+    return {
+        "label": _result_label(idx, result),
+        "sample_id": result.sample_id,
+        "antenna_height_m": float(result.antenna_height_m),
+        "mask_source": result.mask_source,
+        "requested_mask_source": result.requested_mask_source,
+        "files": {key: str(value) for key, value in files.items()},
+        "mask_comparison": _comparison_dict(result.mask_comparison),
+    }
+
+
+def _comparison_dict(comparison) -> dict[str, object] | None:
+    if comparison is None:
+        return None
+    if isinstance(comparison, dict):
+        return comparison
+    return dict(comparison.__dict__)
+
+
+def _result_label(idx: int, result) -> str:
+    return f"{idx:03d} | {result.sample_id} | h={result.antenna_height_m:.2f} m"
+
+
+def _preview_summary(items) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for idx, item in enumerate(items, start=1):
+        files = item.get("files", {})
+        if not isinstance(files, dict):
+            files = {}
+        rows.append(
+            {
+                "#": idx,
+                "sample": item.get("sample_id", ""),
+                "height_m": round(float(item.get("antenna_height_m", 0.0)), 2),
+                "mask": item.get("mask_source", ""),
+                "arrays": files.get("arrays", ""),
+                "metadata": files.get("metadata", ""),
+                "png_files": sum(1 for value in files.values() if str(value).lower().endswith(".png")),
+            }
+        )
+    return rows
+
+
+def _render_preview_item(item: dict[str, object], *, memory_by_label: dict[str, tuple[object, dict[str, str]]]) -> None:
+    label = str(item["label"])
+    if label in memory_by_label:
+        _render_result(*memory_by_label[label])
+        return
+    _render_saved_result(item)
+
+
+def _render_saved_result(item: dict[str, object]) -> None:
+    files = item.get("files", {})
+    if not isinstance(files, dict):
+        files = {}
+    metadata = _load_metadata(files.get("metadata"))
+    sample_id = metadata.get("sample_id", item.get("sample_id", ""))
+    height = float(metadata.get("antenna_height_m", item.get("antenna_height_m", 0.0)))
+    mask_source = metadata.get("mask_source", item.get("mask_source", ""))
+    requested_mask_source = metadata.get("requested_mask_source", item.get("requested_mask_source", ""))
+    st.caption(f"{sample_id} | h={height:.2f} m | mask={mask_source} (requested {requested_mask_source})")
+    if mask_source == "generated":
+        st.warning("No provided LoS/NLoS mask was used for this sample; masks were ray-cast from topology + antenna height.")
+    comparison = metadata.get("mask_comparison") or item.get("mask_comparison")
+    if comparison:
+        _render_mask_comparison(comparison)
+
+    arrays_path = files.get("arrays")
+    if not arrays_path:
+        st.warning("No .npz arrays were saved for this sample, so the preview cannot be reconstructed after the app rerun.")
+        return
+    arrays_path = Path(str(arrays_path))
+    if not arrays_path.exists():
+        st.warning(f"Saved array archive not found: {arrays_path}")
+        return
+    with np.load(arrays_path) as data:
+        arrays = {name: data[name] for name in data.files}
+
+    topology = arrays.get("topology")
+    los = arrays.get("los_mask")
+    nlos = arrays.get("nlos_mask")
+    ground = arrays.get("ground_mask")
+    if topology is None or los is None or nlos is None:
+        st.warning(f"Saved array archive is missing topology or mask arrays: {arrays_path}")
+        return
+    if ground is None:
+        ground = (np.asarray(topology) <= 1.0e-6).astype(np.float32)
+
+    cols = st.columns(3)
+    cols[0].image(_topology_display(topology), caption="Topology", use_container_width=True)
+    cols[1].image(_mask_display(los), caption="LoS mask", use_container_width=True)
+    cols[2].image(_mask_display(nlos), caption="NLoS mask", use_container_width=True)
+
+    predictions = {task: arrays[f"pred_{task}"] for task in ("path_loss", "delay_spread", "angular_spread") if f"pred_{task}" in arrays}
+    if predictions:
+        if "pred_joint" in files and Path(str(files["pred_joint"])).exists():
+            st.image(files["pred_joint"], caption="Joint prediction", use_container_width=True)
+        pcols = st.columns(3)
+        for col, task in zip(pcols, ("path_loss", "delay_spread", "angular_spread")):
+            label, unit, _ = TASK_LABELS[task]
+            if f"pred_{task}" in files and Path(str(files[f"pred_{task}"])).exists():
+                col.image(files[f"pred_{task}"], use_container_width=True)
+            elif task in predictions:
+                col.image(_map_display(predictions[task], ground), caption=f"{label} ({unit})", use_container_width=True)
+
+
+def _load_metadata(path: object) -> dict[str, object]:
+    if not path:
+        return {}
+    meta_path = Path(str(path))
+    if not meta_path.exists():
+        return {}
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
 
 
 def _render_result(result, files: dict[str, str]) -> None:

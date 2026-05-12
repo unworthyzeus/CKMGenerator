@@ -423,9 +423,10 @@ The web interface exposes the following controls:
 - `Run final residual model`: if disabled, only topology, masks, priors, arrays, and metadata are produced.
 - `Model batch size`: number of prepared samples sent through the model at once.
 - `CUDA mixed precision`: enables CUDA autocast for faster NVIDIA inference with tiny numeric differences.
-- `Save numeric arrays (.npz)`: writes all numeric arrays for later analysis.
-- `Save LoS/NLoS mask PNGs`: writes binary mask images.
-- `Save visual map PNGs`: writes rendered prior/prediction figures with colorbars.
+- `Save numeric arrays (.npz)`: writes the fast authoritative numeric export.
+- `Compress numeric arrays`: writes smaller `.npz` files at the cost of slower export.
+- `Save LoS/NLoS mask PNGs`: writes optional binary mask images.
+- `Save visual map PNGs`: writes optional rendered prior/prediction figures with colorbars.
 - `Image max height (m)`: scales image pixels into metres.
 - `Image pixels are already metres`: disables image normalization and treats image pixel values as metres.
 - `Distance between pixels (m)`: physical input pixel spacing before conversion to the model grid.
@@ -640,12 +641,14 @@ unchanged at thesis scale. The complete generated-mask path is:
 | Topology preparation | CPU arrays | `0.002 s` |
 | LoS/NLoS mask generation | vectorized torch/CUDA ray-caster | `0.30 s` |
 | Final calibrated priors | torch/CUDA prior backend | `0.04 s` |
-| Residual GMM-head prediction | CUDA mixed fp16 | `0.54 s` |
+| Residual GMM-head prediction + default `.npz` export | CUDA mixed fp16 + uncompressed NumPy archive | `0.54 s` |
 | Complete final-generator path | CUDA, batch size 1 | `0.88 s` |
 
 Compared with the MATLAB ray-tracing script on the same Barcelona geometry
 (`99.89 s/sample`), this is `113.7x` faster and exceeds the original `10x` to
 `100x` runtime target.
+The fast uncompressed `.npz` export is included in this speed calculation;
+optional mask PNGs and rendered map PNGs are not.
 
 For large image-only batches, provided masks are faster and more reproducible
 than generated masks. If no masks are provided, the geometric ray-caster must
