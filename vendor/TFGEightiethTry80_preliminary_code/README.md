@@ -40,7 +40,3 @@ load the frozen JSON files.
 Core technical notes:
 
 - architecture and training rationale: [DESIGN_TRY80.md](/c:/TFG/TFGpractice/TFGEightiethTry80/DESIGN_TRY80.md)
-- prior formulas and references: [PRIOR_FORMULAS_TRY80.md](/c:/TFG/TFGpractice/TFGEightiethTry80/docs/PRIOR_FORMULAS_TRY80.md)
-- equation note for frozen Try 78 / 79 priors: [TRY78_TRY79_EQUATIONS_FOR_TRY80.md](/c:/TFG/TFGpractice/TFGEightiethTry80/docs/TRY78_TRY79_EQUATIONS_FOR_TRY80.md)
-- supervisor-facing LaTeX note: [SUPERVISOR_NOTE_TRY80_PRIORS.tex](/c:/TFG/TFGpractice/TFGEightiethTry80/docs/SUPERVISOR_NOTE_TRY80_PRIORS.tex)
-- masking equivalence note: [MASKING_EQUIVALENCE_TRY80.md](/c:/TFG/TFGpractice/TFGEightiethTry80/docs/MASKING_EQUIVALENCE_TRY80.md)
