@@ -16,7 +16,7 @@ from .priors_try80 import Try80PriorComputer
 
 
 SampleRef = Tuple[str, str]
-LOG1P_DELAY_NORM = float(math.log1p(400.0))
+LOG1P_DELAY_NORM = float(math.log1p(910.0))
 LOG1P_ANGULAR_NORM = float(math.log1p(90.0))
 PATH_LOSS_MIN_DB = 20.0
 
@@ -228,9 +228,9 @@ class Try80JointDataset(Dataset):
                     los,
                     nlos,
                     ground_f,
-                    path_prior / 180.0,
-                    path_prior_los / 180.0,
-                    path_prior_nlos / 180.0,
+                    path_prior / 185.0,
+                    path_prior_los / 185.0,
+                    path_prior_nlos / 185.0,
                     np.log1p(np.clip(delay_prior, 0.0, None)) / LOG1P_DELAY_NORM,
                     np.log1p(np.clip(angular_prior, 0.0, None)) / LOG1P_ANGULAR_NORM,
                 ],

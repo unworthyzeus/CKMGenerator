@@ -17,7 +17,7 @@ METERS_PER_PIXEL = 1.0
 FREQ_GHZ = 7.125
 RX_HEIGHT_M = 1.5
 PATH_LOSS_MIN_DB = 20.0
-PATH_LOSS_MAX_DB = 180.0
+PATH_LOSS_MAX_DB = 185.0
 HEIGHT_NORM_M = 90.0
 KERNEL_SIZES = (15, 41)
 ANT_Q1 = 58.12
@@ -75,7 +75,7 @@ PATH_N_FEAT = len(PATH_FEATURE_NAMES)
 
 METRIC_SPECS: Dict[str, Dict[str, float | str]] = {
     "delay_spread": {
-        "clip_hi": 400.0,
+        "clip_hi": 910.0,
         "base_los": 4.0,
         "base_nlos": 11.0,
         "coef_logd": 0.11,
@@ -117,8 +117,8 @@ TOPOLOGY_PRIOR_BIAS_LOG = {
     },
 }
 
-LOS_CLIP_HI = {"delay_spread": 400.0, "angular_spread": 15.0}
-NLOS_CLIP_HI = {"delay_spread": 400.0, "angular_spread": 90.0}
+LOS_CLIP_HI = {"delay_spread": 910.0, "angular_spread": 15.0}
+NLOS_CLIP_HI = {"delay_spread": 910.0, "angular_spread": 90.0}
 
 
 def _build_d2d() -> np.ndarray:
@@ -461,7 +461,7 @@ def _compute_formula_prior_78(los_mask: np.ndarray, h_tx: float) -> np.ndarray:
     los_prob = los_mask.astype(np.float64)
     los_blend = 0.7 * los_path + 0.3 * np.minimum(los_path, a2g_los)
     prior = los_prob * los_blend + (1.0 - los_prob) * nlos_path
-    return np.clip(prior, 0.0, 180.0).astype(np.float32)
+    return np.clip(prior, 0.0, PATH_LOSS_MAX_DB).astype(np.float32)
 
 
 def _avg_pool_78(arr: np.ndarray, k: int) -> np.ndarray:

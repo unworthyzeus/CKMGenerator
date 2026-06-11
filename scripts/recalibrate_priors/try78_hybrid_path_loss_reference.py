@@ -53,6 +53,7 @@ METERS_PER_PIXEL = 1.0
 FREQ_GHZ = 7.125
 RX_HEIGHT_M = 1.5
 PATH_LOSS_MIN_DB = 20.0
+PATH_LOSS_MAX_DB = 185.0
 HEIGHT_SCALE = 90.0
 KERNEL_SIZES = (15, 41)
 
@@ -172,7 +173,7 @@ def compute_formula_prior(
     los_prob = los_mask.astype(np.float64)
     los_blend = 0.7 * los_path + 0.3 * np.minimum(los_path, a2g_los)
     prior = los_prob * los_blend + (1.0 - los_prob) * nlos_path
-    return np.clip(prior, 0.0, 180.0).astype(np.float32)
+    return np.clip(prior, 0.0, PATH_LOSS_MAX_DB).astype(np.float32)
 
 
 def _avg_pool(arr: np.ndarray, k: int) -> np.ndarray:
@@ -250,7 +251,7 @@ def apply_calibration(
             if key in coefs:
                 pred_flat = (x_flat @ coefs[key]).astype(np.float32)
                 pred = pred_flat.reshape(prior.shape)
-                out[region] = np.clip(pred[region], PATH_LOSS_MIN_DB, 180.0)
+                out[region] = np.clip(pred[region], PATH_LOSS_MIN_DB, PATH_LOSS_MAX_DB)
                 break
     return out
 
@@ -417,7 +418,7 @@ def predict_nlos_map_torch(
     nlos_path = torch.maximum(cost231, a2g_nlos)
 
     los_blend = 0.7 * los_path + 0.3 * torch.minimum(los_path, a2g_los)
-    prior = torch.clamp(los_mask * los_blend + (1.0 - los_mask) * nlos_path, min=0.0, max=180.0)
+    prior = torch.clamp(los_mask * los_blend + (1.0 - los_mask) * nlos_path, min=0.0, max=PATH_LOSS_MAX_DB)
 
     ground = (topology == 0.0).to(torch.float32)
     building_mask = 1.0 - ground
@@ -465,7 +466,7 @@ def predict_nlos_map_torch(
         if key in coefs:
             w = torch.from_numpy(coefs[key].astype(np.float32)).to(device)
             pred = torch.matmul(x_flat, w).reshape(prior.shape)
-            pred = torch.clamp(pred, min=PATH_LOSS_MIN_DB, max=180.0)
+            pred = torch.clamp(pred, min=PATH_LOSS_MIN_DB, max=PATH_LOSS_MAX_DB)
             out = torch.where(region, pred, out)
             break
 
