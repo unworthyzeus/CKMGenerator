@@ -13,10 +13,8 @@ Pipeline:
 3. Fit regime-wise ridge regressors in log1p(spread) space:
       metric x topology_class x LoS/NLoS x antenna-height-bin
    with broad fallback regimes for sparse cases.
-4. Apply LoS-specific output clamps: angular spread in LoS regions is
-   clamped to [0, 15] deg because the direct ray dominates and the GT
-   spike-at-zero distribution is not informative above that.
-   See ``LOS_ANGULAR_SPREAD_NOTE.md`` for the rationale.
+4. Apply output clamps matching the CKM target support: delay spread in
+   [0, 910] ns and angular spread in [0, 180] deg.
 5. Evaluate on a city-holdout split matching the Try 77 semantics.
 
 Height awareness: UAV height is used both as a regime key (``ant_bin``) and
@@ -88,7 +86,7 @@ METRIC_SPECS: Dict[str, Dict[str, float | str]] = {
     "delay_spread": {
         "field": "delay_spread",
         "unit": "ns",
-        "clip_hi": 400.0,
+        "clip_hi": 910.0,
         "base_los": 4.0,
         "base_nlos": 11.0,
         "coef_logd": 0.11,
@@ -101,7 +99,7 @@ METRIC_SPECS: Dict[str, Dict[str, float | str]] = {
     "angular_spread": {
         "field": "angular_spread",
         "unit": "deg",
-        "clip_hi": 90.0,
+        "clip_hi": 180.0,
         "base_los": 3.0,
         "base_nlos": 7.0,
         "coef_logd": 0.05,
@@ -159,12 +157,9 @@ FEATURE_NAMES = (
 )
 N_FEAT = len(FEATURE_NAMES)
 
-# LoS-specific output clamp for angular spread. In LoS the direct ray
-# dominates and the GT angular spread is spike-like near zero; the
-# 0..90 deg headroom (NLOS_CLIP_HI) would amplify rare spike outliers
-# in LoS regions. See LOS_ANGULAR_SPREAD_NOTE.md.
+# Output clamps match the CKM dataset support for the spread targets.
 LOS_CLIP_HI = {
-    "angular_spread": 15.0,
+    "angular_spread": float(METRIC_SPECS["angular_spread"]["clip_hi"]),
     "delay_spread": float(METRIC_SPECS["delay_spread"]["clip_hi"]),
 }
 NLOS_CLIP_HI = {
