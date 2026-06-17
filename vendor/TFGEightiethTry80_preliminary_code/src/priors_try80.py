@@ -86,7 +86,7 @@ METRIC_SPECS: Dict[str, Dict[str, float | str]] = {
         "coef_interaction": 0.60,
     },
     "angular_spread": {
-        "clip_hi": 90.0,
+        "clip_hi": 180.0,
         "base_los": 3.0,
         "base_nlos": 7.0,
         "coef_logd": 0.05,
@@ -117,8 +117,8 @@ TOPOLOGY_PRIOR_BIAS_LOG = {
     },
 }
 
-LOS_CLIP_HI = {"delay_spread": 910.0, "angular_spread": 15.0}
-NLOS_CLIP_HI = {"delay_spread": 910.0, "angular_spread": 90.0}
+LOS_CLIP_HI = {"delay_spread": 910.0, "angular_spread": 180.0}
+NLOS_CLIP_HI = {"delay_spread": 910.0, "angular_spread": 180.0}
 
 
 def _build_d2d() -> np.ndarray:
